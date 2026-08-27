@@ -1,0 +1,40 @@
+[project]
+name = "ew-smart-scan"
+version = "0.1.0"
+description = "ML-based Electronic Support receiver scheduler — SIH 2026"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "gymnasium>=0.29",
+    "numpy>=1.26",
+    "scipy>=1.13",
+    "matplotlib>=3.9",
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+]
+
+[project.optional-dependencies]
+rl = [
+    "torch>=2.3",
+    "stable-baselines3>=2.3",
+    "sb3-contrib>=2.3",
+]
+data = [
+    "huggingface-hub>=0.23",
+    "datasets>=2.20",
+]
+dashboard = [
+    "plotly>=5.22",
+    "dash>=2.17",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ew_sim", "schedulers", "eval", "demo", "hardware"]
