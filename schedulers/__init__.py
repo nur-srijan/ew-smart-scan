@@ -9,6 +9,12 @@ from schedulers.baselines import (
     PriorityQueueSweep,
     UniformRandomSweep,
 )
+from schedulers.rmab import WhittleIndexScheduler
+from schedulers.predictor import (
+    OnlinePeriodicityEstimator,
+    HybridPredictiveScheduler,
+)
+from schedulers.drl_agent import DRLScheduler
 
 __all__ = [
     "BaseScheduler",
@@ -16,4 +22,8 @@ __all__ = [
     "PseudoRandomSweep",
     "PriorityQueueSweep",
     "UniformRandomSweep",
+    "WhittleIndexScheduler",
+    "OnlinePeriodicityEstimator",
+    "HybridPredictiveScheduler",
+    "DRLScheduler",
 ]
