@@ -108,13 +108,13 @@ def train_curriculum(total_timesteps: int = 30000) -> RecurrentPPO:
     model = RecurrentPPO(
         policy="MlpLstmPolicy",
         env=env_stage1,
-        learning_rate=3e-4,
+        learning_rate=4e-4,
         n_steps=1024,
         batch_size=64,
         n_epochs=5,
         gamma=0.98,
         gae_lambda=0.95,
-        ent_coef=0.02,  # encourage early exploration
+        ent_coef=0.08,  # strong exploration across all 35 sub-bands
         verbose=0,
     )
     

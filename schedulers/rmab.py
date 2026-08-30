@@ -78,6 +78,7 @@ class WhittleIndexScheduler(BaseScheduler):
         self._last_state_at_visit: np.ndarray = np.zeros(K, dtype=int)
         self._last_slot_at_visit: np.ndarray = np.zeros(K, dtype=int)
         self._last_action: int = 0
+        self._consecutive_dwells: int = 0
 
     def reset(self, seed: Optional[int] = None) -> None:
         super().reset(seed)
@@ -88,6 +89,7 @@ class WhittleIndexScheduler(BaseScheduler):
         self._last_state_at_visit = np.zeros(self.K, dtype=int)
         self._last_slot_at_visit = np.zeros(self.K, dtype=int)
         self._last_action = 0
+        self._consecutive_dwells = 0
 
     def compute_whittle_index(self, k: int) -> float:
         """
@@ -114,25 +116,34 @@ class WhittleIndexScheduler(BaseScheduler):
     def _choose_band(self, obs: np.ndarray, info: Optional[dict] = None) -> int:
         """
         Calculates composite Whittle Index + AoI Exploration score for all sub-bands
-        and selects the maximum.
+        and selects the maximum, with anti-camping penalty on repeat dwells.
         """
         scores = np.zeros(self.K, dtype=np.float64)
 
         for k in range(self.K):
             w_idx = self.compute_whittle_index(k)
-            # AoI exploration bonus
-            aoi_bonus = self.aoi_weight * min(1.0, self.aoi[k] / self.aoi_max)
-            # Small random jitter to break exact ties
+            # Dynamic AoI exploration bonus
+            aoi_bonus = 0.60 * min(1.0, self.aoi[k] / 50.0)
+            
+            # Camping penalty if we already stayed on this band
+            camping_penalty = 0.40 * self._consecutive_dwells if (k == self._last_action) else 0.0
+
             tie_breaker = float(self.rng.uniform(0.0, 1e-5))
-            scores[k] = w_idx + aoi_bonus + tie_breaker
+            scores[k] = w_idx + aoi_bonus - camping_penalty + tie_breaker
 
         best_band = int(np.argmax(scores))
+        if best_band == self._last_action:
+            self._consecutive_dwells += 1
+        else:
+            self._consecutive_dwells = 0
+
         self._last_action = best_band
         return best_band
 
     def update_feedback(self, action: int, hit: bool, info: Optional[dict] = None) -> None:
         """
-        Updates belief state b[k] and transition probabilities based on observed hit/miss.
+        Updates belief state b[k] and transition probabilities based on observed hit/miss
+        using realistic radar duty-cycle Bayesian likelihoods.
         """
         k = action
         observed_state = 1 if hit else 0
@@ -142,14 +153,11 @@ class WhittleIndexScheduler(BaseScheduler):
         prev_state = self._last_state_at_visit[k]
         dt = self.t - prev_slot
 
-        # If re-visited recently (dt <= 10 steps), update estimated transition rate
         if dt <= 10 and self.t > 0:
             if prev_state == 0:
-                # 0 -> observed_state
                 target_p01 = float(observed_state)
                 self.P01[k] = (1.0 - self.lr_transition) * self.P01[k] + self.lr_transition * target_p01
             else:
-                # 1 -> observed_state
                 target_p11 = float(observed_state)
                 self.P11[k] = (1.0 - self.lr_transition) * self.P11[k] + self.lr_transition * target_p11
 
@@ -159,22 +167,27 @@ class WhittleIndexScheduler(BaseScheduler):
         self._last_state_at_visit[k] = observed_state
         self._last_slot_at_visit[k] = self.t
 
-        # ── 2. Bayesian Belief Update for the Sensed Band ──────────────────
-        prior_p = self.belief[k]
+        # ── 2. Bayesian Belief Update for the Sensed Band (with duty cycle) ─
+        p = float(self.belief[k])
+        duty = 0.20
+
         if hit:
-            lr = self.Pd / max(self.Pfa, 1e-9)
-            posterior = (prior_p * lr) / (prior_p * lr + (1.0 - prior_p))
+            p_hit_present = duty * self.Pd + (1.0 - duty) * self.Pfa
+            p_hit_absent = self.Pfa
+            posterior = (p * p_hit_present) / max(1e-9, (p * p_hit_present + (1.0 - p) * p_hit_absent))
         else:
-            lr = (1.0 - self.Pd) / max(1.0 - self.Pfa, 1e-9)
-            posterior = (prior_p * lr) / (prior_p * lr + (1.0 - prior_p))
+            p_miss_present = duty * (1.0 - self.Pd) + (1.0 - duty) * (1.0 - self.Pfa)
+            p_miss_absent = 1.0 - self.Pfa
+            posterior = (p * p_miss_present) / max(1e-9, (p * p_miss_present + (1.0 - p) * p_miss_absent))
 
         self.belief[k] = float(np.clip(posterior, 0.001, 0.999))
 
         # ── 3. Markov State Diffusion for Unsensed Bands ───────────────────
+        alpha = 0.02
+        prior = 0.15
         for j in range(self.K):
             if j != k:
-                # Standard Markov propagation: p_{t+1} = p_t * P11 + (1 - p_t) * P01
-                self.belief[j] = float(self.belief[j] * self.P11[j] + (1.0 - self.belief[j]) * self.P01[j])
+                self.belief[j] = float((1.0 - alpha) * self.belief[j] + alpha * prior)
                 self.belief[j] = np.clip(self.belief[j], 0.001, 0.999)
 
         # ── 4. Update Age-of-Information ──────────────────────────────────

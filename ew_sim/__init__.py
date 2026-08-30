@@ -11,6 +11,11 @@ from ew_sim.emitters import (
 )
 from ew_sim.truth_engine import TruthEngine, build_default_truth_engine
 from ew_sim.env import EWSpectrumEnv
+from ew_sim.turing_loader import (
+    PulseDescriptorWord,
+    TuringDatasetAdapter,
+    SyntheticTuringGenerator,
+)
 
 __all__ = [
     "BaseEmitter",
@@ -21,4 +26,7 @@ __all__ = [
     "TruthEngine",
     "build_default_truth_engine",
     "EWSpectrumEnv",
+    "PulseDescriptorWord",
+    "TuringDatasetAdapter",
+    "SyntheticTuringGenerator",
 ]

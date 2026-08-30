@@ -80,10 +80,10 @@ class EWSpectrumEnv(gym.Env):
         T: int = 2000,
         Pd: float = 0.95,
         Pfa: float = 1e-4,
-        w_hit: float = 5.0,
-        w_new: float = 20.0,
-        w_aoi: float = 1.0,
-        w_switch: float = 0.5,
+        w_hit: float = 6.0,
+        w_new: float = 40.0,
+        w_aoi: float = 2.5,
+        w_switch: float = 0.2,
         aoi_max: int = 200,
         seed: Optional[int] = None,
         render_mode: Optional[str] = None,
@@ -127,6 +127,7 @@ class EWSpectrumEnv(gym.Env):
         self._belief: np.ndarray = np.ones(self.K, dtype=np.float32) * 0.5
         self._aoi: np.ndarray = np.zeros(self.K, dtype=np.float32)
         self._last_action: int = 0
+        self._consecutive_dwells: int = 0
         self._discovered: set[int] = set()   # emitter IDs seen so far
 
         # Episode statistics
@@ -152,6 +153,7 @@ class EWSpectrumEnv(gym.Env):
         self._belief = np.ones(self.K, dtype=np.float32) * 0.5
         self._aoi = np.zeros(self.K, dtype=np.float32)
         self._last_action = 0
+        self._consecutive_dwells = 0
         self._discovered = set()
         self._total_hits = 0
         self._total_dwells = 0
@@ -187,18 +189,24 @@ class EWSpectrumEnv(gym.Env):
                     self._discovered.add(emitter.id)
                     new_discovery = True
 
-        # ── 3. Compute reward ───────────────────────────────────────────────
+        # ── 3. Consecutive dwell tracking & anti-camping ───────────────────
+        if action == self._last_action:
+            self._consecutive_dwells += 1
+        else:
+            self._consecutive_dwells = 0
+
+        # ── 4. Compute reward ───────────────────────────────────────────────
         reward = self._compute_reward(action, hit, new_discovery)
 
-        # ── 4. Belief update (Bayes) ────────────────────────────────────────
+        # ── 5. Belief update (Bayes with duty-cycle) ────────────────────────
         self._update_belief(action, hit)
 
-        # ── 5. AoI update ───────────────────────────────────────────────────
+        # ── 6. AoI update ───────────────────────────────────────────────────
         self._aoi += 1.0
         self._aoi[action] = 0.0
         self._aoi = np.clip(self._aoi, 0, self.aoi_max)
 
-        # ── 6. Statistics ───────────────────────────────────────────────────
+        # ── 7. Statistics ───────────────────────────────────────────────────
         self._total_dwells += 1
         if hit and true_active:
             self._total_hits += 1
@@ -234,38 +242,52 @@ class EWSpectrumEnv(gym.Env):
         new_discovery: bool,
     ) -> float:
         r = 0.0
-        r += self.w_hit  * float(hit)
-        r += self.w_new  * float(new_discovery)
-        r += self.w_aoi  * (self._aoi[action] / self.aoi_max)
+        # 1. Pulse intercept reward with burst decay to discourage camping
+        if hit:
+            burst_decay = 1.0 / (1.0 + 0.25 * self._consecutive_dwells)
+            r += self.w_hit * burst_decay
+
+        # 2. Large discovery reward for finding previously unobserved emitters
+        if new_discovery:
+            r += self.w_new
+
+        # 3. Age-of-Information exploration reward (high for unvisited bands)
+        r += self.w_aoi * (self._aoi[action] / self.aoi_max)
+
+        # 4. Anti-Camping Penalty: Penalize staying on the same band > 3 consecutive slots
+        if self._consecutive_dwells >= 3:
+            r -= 1.2 * (self._consecutive_dwells - 2)
+
+        # 5. Mild switching cost
         r -= self.w_switch * abs(action - self._last_action) / max(self.K - 1, 1)
         return float(r)
 
     def _update_belief(self, action: int, hit: bool) -> None:
         """
-        Bayesian belief update for the sensed band, Markov diffusion for the rest.
+        Bayesian belief update accounting for radar duty cycle (d ~ 0.20),
+        followed by Markov diffusion for unsensed bands.
         """
         p = float(self._belief[action])
+        duty = 0.20
 
-        # Bayes update on sensed band
         if hit:
-            likelihood_ratio = self.Pd / max(self.Pfa, 1e-9)
-            posterior = p * likelihood_ratio / (
-                p * likelihood_ratio + (1 - p)
-            )
+            p_hit_present = duty * self.Pd + (1.0 - duty) * self.Pfa
+            p_hit_absent = self.Pfa
+            posterior = (p * p_hit_present) / max(1e-9, (p * p_hit_present + (1.0 - p) * p_hit_absent))
         else:
-            likelihood_ratio = (1 - self.Pd) / max(1 - self.Pfa, 1e-9)
-            posterior = p * likelihood_ratio / (
-                p * likelihood_ratio + (1 - p)
-            )
+            p_miss_present = duty * (1.0 - self.Pd) + (1.0 - duty) * (1.0 - self.Pfa)
+            p_miss_absent = 1.0 - self.Pfa
+            posterior = (p * p_miss_present) / max(1e-9, (p * p_miss_present + (1.0 - p) * p_miss_absent))
+
         self._belief[action] = float(np.clip(posterior, 0.01, 0.99))
 
-        # Diffuse unsensed bands toward prior (simple exponential smoothing)
-        alpha = 0.05   # diffusion rate
-        prior = 0.3    # global prior occupancy estimate
+        # Diffuse unsensed bands toward prior
+        alpha = 0.02
+        prior = 0.15
         mask = np.ones(self.K, dtype=bool)
         mask[action] = False
         self._belief[mask] = (
-            (1 - alpha) * self._belief[mask] + alpha * prior
+            (1.0 - alpha) * self._belief[mask] + alpha * prior
         )
 
     def _get_obs(self) -> np.ndarray:

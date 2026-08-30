@@ -157,32 +157,48 @@ class DRLScheduler(BaseScheduler):
             torch.manual_seed(seed)
         self.hidden = self.net.init_hidden(batch_size=1).to(self.device)
         self.lstm_states = None
+        self._last_action = 0
+        self._consecutive_dwells = 0
 
     def _choose_band(self, obs: np.ndarray, info: Optional[dict] = None) -> int:
         """
         Executes real-time neural inference to select the optimal sub-band.
+        Applies patrol breakout if camped on same band for >3 consecutive slots.
         """
         if self.sb3_model is not None:
+            # If camped on same band for 3+ slots, switch to stochastic sampling to patrol unvisited bands
+            det_mode = self.deterministic if (self._consecutive_dwells < 3) else False
             action, self.lstm_states = self.sb3_model.predict(
                 obs,
                 state=self.lstm_states,
-                deterministic=self.deterministic,
+                deterministic=det_mode,
             )
-            return int(action)
+            chosen = int(action)
+            if chosen == self._last_action:
+                self._consecutive_dwells += 1
+            else:
+                self._consecutive_dwells = 0
+            self._last_action = chosen
+            return chosen
 
         self.net.eval()
         with torch.no_grad():
             obs_tensor = torch.from_numpy(obs).float().to(self.device)
             logits, _, self.hidden = self.net(obs_tensor, self.hidden)
 
-            if self.deterministic:
+            if self.deterministic and self._consecutive_dwells < 3:
                 action = int(torch.argmax(logits, dim=-1).item())
             else:
                 probs = F.softmax(logits, dim=-1)
                 dist = torch.distributions.Categorical(probs)
                 action = int(dist.sample().item())
 
-        return action
+            if action == self._last_action:
+                self._consecutive_dwells += 1
+            else:
+                self._consecutive_dwells = 0
+            self._last_action = action
+            return action
 
     def save(self, path: str | Path) -> None:
         """Save PyTorch weights to disk."""
