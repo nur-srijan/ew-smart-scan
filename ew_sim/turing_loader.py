@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Optional, Sequence
 import numpy as np
 
-from ew_sim.truth_engine import TruthEngine
+from ew_sim.truth_engine import TruthEngine, EmitterActivity
+from ew_sim.emitters import BaseEmitter
 
 
 @dataclass
@@ -35,6 +36,29 @@ class PulseDescriptorWord:
     pulse_width_sec: float   # Pulse Width
     amplitude_dbm: float     # Received Peak Power
     emitter_id: int          # Ground truth emitter label
+
+
+class TuringSyntheticEmitter(BaseEmitter):
+    """Emitter wrapper for PDW streams matching the Alan Turing schema."""
+
+    def __init__(
+        self,
+        emitter_id: int,
+        band_index: int,
+        slot_to_band: dict[int, int],
+        T_slot: float,
+        emitter_type: str = "TuringSyntheticRadar",
+    ):
+        super().__init__(emitter_id, band_index)
+        self.slot_to_band = slot_to_band
+        self.T_slot = T_slot
+        self.custom_type = emitter_type
+
+    def state_at(self, t_sec: float) -> tuple[Optional[int], bool]:
+        slot = int(t_sec / self.T_slot)
+        if slot in self.slot_to_band:
+            return (self.slot_to_band[slot], True)
+        return (None, False)
 
 
 class TuringDatasetAdapter:
@@ -90,6 +114,10 @@ class TuringDatasetAdapter:
         )
         engine.S = np.zeros((self.K, self.T), dtype=np.int8)
 
+        # Group PDWs by emitter ID
+        emitter_slots: dict[int, dict[int, int]] = {}
+        emitter_bands: dict[int, list[int]] = {}
+
         for pdw in pdws:
             if pdw.amplitude_dbm < self.sensitivity_dbm:
                 continue  # Below receiver sensitivity
@@ -99,7 +127,37 @@ class TuringDatasetAdapter:
 
             if band is not None and slot is not None:
                 engine.S[band, slot] = 1
+                eid = pdw.emitter_id if pdw.emitter_id is not None else (band + 1)
+                if eid not in emitter_slots:
+                    emitter_slots[eid] = {}
+                    emitter_bands[eid] = []
+                emitter_slots[eid][slot] = band
+                emitter_bands[eid].append(band)
 
+        # Build BaseEmitter objects and register activity records
+        emitters: list[BaseEmitter] = []
+        for eid, slots_dict in emitter_slots.items():
+            bands = emitter_bands[eid]
+            primary_band = max(set(bands), key=bands.count) if bands else 0
+            is_hopping = len(set(bands)) > 1
+            e_type = f"Turing-FHSS-{eid}" if is_hopping else f"Turing-Radar-{eid}"
+
+            emitter_obj = TuringSyntheticEmitter(
+                emitter_id=eid,
+                band_index=primary_band,
+                slot_to_band=slots_dict,
+                T_slot=self.T_slot,
+                emitter_type=e_type,
+            )
+            emitters.append(emitter_obj)
+            engine.activity[eid] = EmitterActivity(
+                emitter_id=eid,
+                band_index=primary_band,
+                active_slots=sorted(list(slots_dict.keys())),
+            )
+
+        engine._emitters = emitters
+        engine._built = True
         return engine
 
 

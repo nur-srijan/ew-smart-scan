@@ -187,7 +187,7 @@ class FoMEvaluator:
 
             emitter_reports[emitter.id] = EmitterMetrics(
                 emitter_id=emitter.id,
-                emitter_type=type(emitter).__name__,
+                emitter_type=getattr(emitter, "custom_type", type(emitter).__name__),
                 primary_band=emitter.primary_band,
                 total_transmitted_pulses=n_trans,
                 intercepted_pulses=n_inter,
@@ -198,6 +198,10 @@ class FoMEvaluator:
             )
 
         # 3. Overall Aggregates
+        if total_transmitted_all == 0:
+            total_transmitted_all = int(np.sum(self.truth.S[:, :T]))
+            total_intercepted_all = active_dwell_hits
+
         overall_ir = (total_intercepted_all / total_transmitted_all) if total_transmitted_all > 0 else 0.0
         mean_tti = float(np.mean(ttis_sec)) if ttis_sec else 0.0
         max_tti = float(np.max(ttis_sec)) if ttis_sec else 0.0

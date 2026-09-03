@@ -116,7 +116,7 @@ app.layout = html.Div(
             style={"borderBottom": "2px solid #1E293B", "paddingBottom": "16px", "marginBottom": "20px", "display": "flex", "justifyContent": "space-between", "alignItems": "center"},
             children=[
                 html.Div([
-                    html.H1("⚡ DRDO ELECTRONIC WARFARE — SMART SCAN SCHEDULER", style={"fontSize": "22px", "fontWeight": "bold", "color": "#38BDF8", "margin": 0, "letterSpacing": "0.5px"}),
+                    html.H1("DRDO ELECTRONIC WARFARE — SMART SCAN SCHEDULER", style={"fontSize": "22px", "fontWeight": "bold", "color": "#38BDF8", "margin": 0, "letterSpacing": "0.5px"}),
                     html.P("Autonomous Machine Learning & RMAB Spectrum Surveillance Dashboard · SIH 2026 · PS-1778", style={"fontSize": "13px", "color": "#94A3B8", "margin": "4px 0 0 0"}),
                 ]),
                 html.Div([
@@ -136,12 +136,12 @@ app.layout = html.Div(
                     dcc.Dropdown(
                         id="policy-dropdown",
                         options=[
-                            {"label": "🤖 Recurrent DRL Agent (PPO-LSTM)", "value": "DRLScheduler-RecurrentPPO"},
-                            {"label": "⚡ Whittle Index RMAB (Analytical Bandit)", "value": "WhittleIndexRMAB"},
-                            {"label": "🎯 Hybrid Predictive RMAB", "value": "HybridPredictiveRMAB"},
-                            {"label": "📋 Priority Queue (Static EDB)", "value": "PriorityQueueSweep"},
-                            {"label": "🎲 Pseudo-Random Permutation", "value": "PseudoRandomSweep"},
-                            {"label": "🔄 Sequential Sweep (Legacy Open-Loop)", "value": "SequentialSweep"},
+                            {"label": "Recurrent DRL Agent (PPO-LSTM)", "value": "DRLScheduler-RecurrentPPO"},
+                            {"label": "Whittle Index RMAB (Analytical Bandit)", "value": "WhittleIndexRMAB"},
+                            {"label": "Hybrid Predictive RMAB", "value": "HybridPredictiveRMAB"},
+                            {"label": "Priority Queue (Static EDB)", "value": "PriorityQueueSweep"},
+                            {"label": "Pseudo-Random Permutation", "value": "PseudoRandomSweep"},
+                            {"label": "Sequential Sweep (Legacy Open-Loop)", "value": "SequentialSweep"},
                         ],
                         value="DRLScheduler-RecurrentPPO",
                         style={"color": "#000"},
