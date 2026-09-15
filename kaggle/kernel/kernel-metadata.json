@@ -1,0 +1,14 @@
+{
+  "id": "nursrijan/ew-smart-scan-drl-1m-curriculum-t4",
+  "title": "ew-smart-scan-drl-1m-curriculum-t4",
+  "code_file": "ew_smart_scan_t4_training.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

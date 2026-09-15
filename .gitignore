@@ -71,6 +71,7 @@ kaggle.json
 *.swo
 *~
 .ipynb_checkpoints/
+.claude/
 
 # macOS / OS Files
 .DS_Store
