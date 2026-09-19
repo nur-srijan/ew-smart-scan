@@ -69,6 +69,7 @@ kaggle.json
 *~
 .ipynb_checkpoints/
 .claude/
+voiceover/
 
 # macOS / OS Files
 .DS_Store

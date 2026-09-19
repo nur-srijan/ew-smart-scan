@@ -1,5 +1,5 @@
 # DRDO EW Smart Scan — Demo Video Script & Transcript
-**Problem Statement ID:** 1778 | **Project:** Autonomous Spectrum Surveillance & Multi-Receiver Scheduling  
+**Problem Statement ID:** 26055 | **Project:** Autonomous Spectrum Surveillance & Multi-Receiver Scheduling  
 **Target Audience:** DRDO Evaluators, Hackathon Jury, Defense SIGINT Technical Committee  
 **Total Duration:** ~3 Minutes (180 Seconds)  
 
