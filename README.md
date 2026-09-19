@@ -53,12 +53,12 @@ Evaluated across dynamic scenarios featuring fixed-frequency air defense radars 
 
 ```
                                Tactical C2-ESM Web Dashboard (Port 8050)
-                       [ 01 Waterfall | 02 Fleet | 03 Threats | 04 FoM | 05 Mission ]
-                                                   │
-                                            REST / JSON API
-                                                   ▼
+                     [ 01 Waterfall | 02 Fleet | 03 Threats | 04 FoM | 05 Mission ]
+                                                 │
+                                          REST / JSON API
+                                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                              Distributed Cooperative Scheduler                              │
+│                               Distributed Cooperative Scheduler                             │
 │                                                                                             │
 │   ┌──────────────────────────┐   ┌──────────────────────────┐   ┌────────────────────────┐  │
 │   │   Node Alpha (UAV-1)     │   │   Node Bravo (UAV-2)     │   │   Node Charlie (C2)    │  │
@@ -67,25 +67,25 @@ Evaluated across dynamic scenarios featuring fixed-frequency air defense radars 
 │   │   • Periodic exploitation│   │   • Agility bracketing   │   │   • Anti-camping audit │  │
 │   └────────────┬─────────────┘   └────────────┬─────────────┘   └───────────┬────────────┘  │
 │                │                              │                             │               │
-│                └───────────────────────┬──────┴─────────────────────────────┘               │
-│                                        ▼                                                    │
+│                └──────────────────────────────┴─────────────────────────────┘               │
+│                                               ▼                                             │
 │                        Strict Spectral Orthogonality Filter                                 │
 │                        (Disjoint Sub-Band Allocations -> 0.0% Collisions)                   │
-└────────────────────────────────────────┬────────────────────────────────────────────────────┘
-                                         ▼
+└───────────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                            C++20 Zero-Allocation RMAB Engine                                │
-│   • Closed-form Whittle Index ranking: 20.80 ns / step                                       │
-│   • Sub-50 µs hard real-time execution deadline guarantee                                   │
-│   • Pybind11 zero-copy bindings (`ew_smart_scan_cpp`)                                       │
-└────────────────────────────────────────┬────────────────────────────────────────────────────┘
-                                         ▼
+│                  • Closed-form Whittle Index ranking: 20.80 ns / step                       │
+│                  • Sub-50 µs hard real-time execution deadline guarantee                    │
+│                  • Pybind11 zero-copy bindings (`ew_smart_scan_cpp`)                        │
+└───────────────────────────────────────────────┴─────────────────────────────────────────────┘
+                                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                         Multi-Receiver Gymnasium Environment                                │
-│   • 35 Sub-Bands (0.5 - 18.0 GHz)                                                           │
-│   • S[K, T] RF Ground Truth Matrix Builder                                                  │
-│   • Dynamic Emitters: Fixed-Frequency, FHSS Agile, Scanning Radar, Jamming Strobe           │
-│   • Online Delta-TOA PRI Estimator & Pulse Descriptor Word (PDW) Stream                     │
+│     • 35 Sub-Bands (0.5 - 18.0 GHz)                                                         │
+│     • S[K, T] RF Ground Truth Matrix Builder                                                │
+│     • Dynamic Emitters: Fixed-Frequency, FHSS Agile, Scanning Radar, Jamming Strobe         │
+│     • Online Delta-TOA PRI Estimator & Pulse Descriptor Word (PDW) Stream                   │
 └─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
