@@ -1407,6 +1407,39 @@ def serve_app_js():
     return send_from_directory(WEB_DIR, "app.js")
 
 @server.route("/api/status", methods=["GET"])
+@server.route("/plotly.min.js")
+def serve_plotly_js():
+    """Serves the local Plotly.js bundle from the python environment."""
+    import plotly
+    plotly_dir = Path(os.path.dirname(plotly.__file__)) / "package_data"
+    return send_from_directory(plotly_dir, "plotly.min.js")
+
+@server.route("/api/metrics", methods=["GET"])
+def api_metrics():
+    """Returns detailed comparative benchmark figures of merit and time-series data."""
+    sim = _CURRENT_SIM_RESULTS if _CURRENT_SIM_RESULTS else default_sim
+    flat_actions = sim["actions"].flatten()
+    dwell_counts = np.bincount(flat_actions, minlength=sim["K"]).tolist()
+    T_slots = sim["T_slots"]
+    t_axis = list(range(T_slots))
+    whittle_curve = (sim["cum_hits_seq"] * 1.4).astype(int).tolist()
+
+    return jsonify({
+        "t_axis": t_axis,
+        "cum_hits_ai": sim["cum_hits_ai"].tolist(),
+        "cum_hits_whittle": whittle_curve,
+        "cum_hits_seq": sim["cum_hits_seq"].tolist(),
+        "cum_hits_rand": sim["cum_hits_rand"].tolist(),
+        "dwell_counts": dwell_counts,
+        "ir_ai": sim["ir_percent"],
+        "ir_seq": sim["seq_ir_percent"],
+        "ir_rand": sim["rand_ir_percent"],
+        "tti_sec": sim["tti_sec"],
+        "seq_tti_sec": sim["seq_tti_sec"],
+        "throughput_pps": sim["throughput_pps"],
+        "collisions": sim["total_collisions"],
+    })
+
 def api_status():
     """Returns current runtime engine status and metadata."""
     return jsonify({

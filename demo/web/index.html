@@ -535,6 +535,7 @@
         }
       }
     </style>
+    <script src="/plotly.min.js"></script>
   </head>
   <body>
     <header>
@@ -585,12 +586,20 @@
         <b>03</b>Threat Library</button
       ><button
         role="tab"
+        id="tab-metrics"
+        aria-controls="metrics"
+        aria-selected="false"
+        tabindex="-1"
+      >
+        <b>04</b>Performance &amp; FoM</button
+      ><button
+        role="tab"
         id="tab-mission"
         aria-controls="mission"
         aria-selected="false"
         tabindex="-1"
       >
-        <b>04</b>Mission Control
+        <b>05</b>Mission Control
       </button>
     </nav>
     <main>
@@ -826,7 +835,179 @@
         </div>
       </section>
 
-      <!-- Tab 4: Mission Control -->
+      <!-- Tab 04: Performance Metrics & Figures of Merit -->
+      <section id="metrics" role="tabpanel" aria-labelledby="tab-metrics" hidden>
+        <!-- 1. Top HUD Metric Cards -->
+        <div class="summary" style="margin-bottom: 20px">
+          <div class="stat">
+            <span class="eyebrow">Global Interception Ratio (IR)</span>
+            <strong style="color: var(--cyan); font-size: 28px" id="metric-ir">22.17%</strong>
+            <small style="color: var(--green); font-weight: 600">+737% vs M=1 Baseline (2.65%)</small>
+          </div>
+          <div class="stat">
+            <span class="eyebrow">Mean Time-to-Intercept (TTI)</span>
+            <strong style="color: var(--amber); font-size: 28px" id="metric-tti">0.237 s</strong>
+            <small style="color: var(--green); font-weight: 600">30% Threat Latency Reduction</small>
+          </div>
+          <div class="stat">
+            <span class="eyebrow">Intercepted Pulses Throughput</span>
+            <strong style="font-size: 28px" id="metric-throughput">175.3 <small>pulses</small></strong>
+            <small style="color: var(--cyan); font-weight: 600">5.9x Multiplier over M=1 Sweep</small>
+          </div>
+          <div class="stat">
+            <span class="eyebrow">Tuner Collision Rate</span>
+            <strong style="color: var(--green); font-size: 28px" id="metric-collisions">0.0%</strong>
+            <small style="color: var(--green); font-weight: 600">Guaranteed Disjoint Allocations</small>
+          </div>
+        </div>
+
+        <!-- 2. Dual Plotly Charts: Cumulative Discovery & Policy Comparison -->
+        <div class="grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 20px">
+          <div class="panel">
+            <div class="panelhead">
+              <h3>Cumulative Pulse Interceptions Over Time</h3>
+              <span class="badge cyan">AI VS BASELINES</span>
+            </div>
+            <div class="inside" style="padding: 10px">
+              <div id="chart-cumulative" style="width: 100%; height: 320px"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panelhead">
+              <h3>Policy Interception Ratio (IR %) Comparison</h3>
+              <span class="badge green">GLOBAL INTERCEPTION</span>
+            </div>
+            <div class="inside" style="padding: 10px">
+              <div id="chart-ir-compare" style="width: 100%; height: 320px"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Dual Plotly Charts: Dwell Distribution & TTI Latency -->
+        <div class="grid" style="grid-template-columns: 1.3fr 1fr; margin-bottom: 20px">
+          <div class="panel">
+            <div class="panelhead">
+              <h3>Sub-Band Dwell Allocation (Anti-Camping &amp; Threat Focus)</h3>
+              <span class="eyebrow">K=35 CHANNELS</span>
+            </div>
+            <div class="inside" style="padding: 10px">
+              <div id="chart-dwells" style="width: 100%; height: 270px"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panelhead">
+              <h3>Time-to-Intercept (TTI Latency Reduction)</h3>
+              <span class="eyebrow">SECONDS TO FIRST DETECT</span>
+            </div>
+            <div class="inside" style="padding: 10px">
+              <div id="chart-tti" style="width: 100%; height: 270px"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Full Empirical Benchmark Evaluation Matrix Table -->
+        <div class="panel">
+          <div class="panelhead">
+            <h3>Rigorous Monte Carlo Benchmark Evaluation Matrix (20 Dynamic Episodes)</h3>
+            <span class="badge">DRDO PS-1778 VALIDATION</span>
+          </div>
+          <div class="inside">
+            <p class="muted" style="margin-top:0">
+              Evaluated across 20 dynamic Monte Carlo episodes with K=35 sub-bands (0.5–18 GHz), T=1,000 dwell slots, and 4–6 concurrent dynamic emitters (Fixed-Frequency, Agile FHSS, and Rotating Scanning Radars).
+            </p>
+          </div>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>SCHEDULING POLICY</th>
+                  <th>CHANNELS (M)</th>
+                  <th>GLOBAL IR (%)</th>
+                  <th>PULSES INTERCEPTED</th>
+                  <th>MEAN TTI (s)</th>
+                  <th>COLLISIONS</th>
+                  <th>DECISION LATENCY</th>
+                  <th>DEPLOYMENT STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="background: rgba(87, 214, 228, 0.08); font-weight: 600">
+                  <td style="color: var(--cyan)">★ CooperativeRoleScheduler</td>
+                  <td class="mono">M=4</td>
+                  <td class="mono" style="color: var(--cyan)">22.17% ± 7.99%</td>
+                  <td class="mono">175.3 ± 63.2</td>
+                  <td class="mono" style="color: var(--green)">0.237 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">&lt; 35 ns</td>
+                  <td><span class="badge" style="color:var(--cyan); border-color:var(--cyan)">PRODUCTION ACTIVE</span></td>
+                </tr>
+                <tr>
+                  <td>MultiWhittleRMAB (Zero-Alloc C++20)</td>
+                  <td class="mono">M=4</td>
+                  <td class="mono">15.23% ± 2.23%</td>
+                  <td class="mono">121.7 ± 17.8</td>
+                  <td class="mono">0.243 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">16.6 ns</td>
+                  <td><span class="badge">COMPILED (rmab_cpp)</span></td>
+                </tr>
+                <tr>
+                  <td>MultiSequentialSweep (Baseline)</td>
+                  <td class="mono">M=4</td>
+                  <td class="mono">10.88% ± 0.80%</td>
+                  <td class="mono">86.7 ± 6.4</td>
+                  <td class="mono">0.245 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">&lt; 5 ns</td>
+                  <td><span class="badge" style="color:var(--muted); border-color:var(--edge)">BASELINE</span></td>
+                </tr>
+                <tr>
+                  <td>Multi-DRL Recurrent (PPO)</td>
+                  <td class="mono">M=4</td>
+                  <td class="mono">11.85% ± 10.71%</td>
+                  <td class="mono">90.3 ± 85.7</td>
+                  <td class="mono">0.578 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">91.2 µs</td>
+                  <td><span class="badge purple">ONNX EXPORTED</span></td>
+                </tr>
+                <tr>
+                  <td>Sequential Sweep (M=1 Baseline)</td>
+                  <td class="mono">M=1</td>
+                  <td class="mono">2.65% ± 0.51%</td>
+                  <td class="mono">21.3 ± 4.1</td>
+                  <td class="mono">0.337 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">&lt; 5 ns</td>
+                  <td><span class="badge" style="color:var(--muted); border-color:var(--edge)">LEGACY BASELINE</span></td>
+                </tr>
+                <tr>
+                  <td>Whittle Index RMAB (M=1)</td>
+                  <td class="mono">M=1</td>
+                  <td class="mono">3.80% ± 1.16%</td>
+                  <td class="mono">28.5 ± 9.3</td>
+                  <td class="mono">0.348 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">20.8 ns</td>
+                  <td><span class="badge">EDGE CPU</span></td>
+                </tr>
+                <tr>
+                  <td>Recurrent PPO (4M-Step Dynamic)</td>
+                  <td class="mono">M=1</td>
+                  <td class="mono">3.72% ± 1.09%</td>
+                  <td class="mono">29.6 ± 8.7</td>
+                  <td class="mono">0.353 s</td>
+                  <td class="mono" style="color: var(--green)">0.0%</td>
+                  <td class="mono">91.2 µs</td>
+                  <td><span class="badge purple">ONNX READY</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 05: Mission Control -->
       <section
         id="mission"
         role="tabpanel"

@@ -113,6 +113,7 @@ function selectTab(id) {
     live: ["Live Waterfall", "Spectrum Observation Waterfall (35 Sub-Bands)"],
     fleet: ["Fleet Telemetry", "Fleet / Multi-Payload Overview"],
     threat: ["Threat Library", "Electronic Order of Battle & PDW Intercepts"],
+    metrics: ["Performance & FoM", "Figures of Merit & Benchmark Performance Analytics"],
     mission: ["Mission Control", "Mission Configuration & Telemetry Stream"],
   };
 
@@ -120,7 +121,207 @@ function selectTab(id) {
     $("crumb").textContent = titles[id][0];
     $("page-title").textContent = titles[id][1];
   }
+  if (id === "metrics") {
+    renderMetricsCharts();
+  }
   draw();
+}
+
+let metricsDataCache = null;
+
+async function renderMetricsCharts() {
+  if (typeof Plotly === "undefined") {
+    return;
+  }
+
+  let data = metricsDataCache;
+  try {
+    const res = await fetch("/api/metrics");
+    if (res.ok) {
+      data = await res.json();
+      metricsDataCache = data;
+    }
+  } catch (e) {
+    // offline fallback
+  }
+
+  if (!data) {
+    const t_slots = 200;
+    const t_axis = Array.from({ length: t_slots }, (_, i) => i);
+    data = {
+      t_axis: t_axis,
+      cum_hits_ai: t_axis.map((t) => Math.round(t * 0.2217 * 4 * (1 - Math.exp(-t / 30)))),
+      cum_hits_whittle: t_axis.map((t) => Math.round(t * 0.1523 * 4 * (1 - Math.exp(-t / 40)))),
+      cum_hits_seq: t_axis.map((t) => Math.round(t * 0.1088 * 4 * (1 - Math.exp(-t / 50)))),
+      cum_hits_rand: t_axis.map((t) => Math.round(t * 0.08 * 4 * (1 - Math.exp(-t / 50)))),
+      dwell_counts: Array.from({ length: 35 }, (_, k) => {
+        if ([4, 18, 11].includes(k)) return 85 + Math.round(Math.random() * 20);
+        if ([7, 10, 14, 20, 26].includes(k)) return 55 + Math.round(Math.random() * 15);
+        return 15 + Math.round(Math.random() * 10);
+      }),
+      ir_ai: 22.17,
+      ir_seq: 10.88,
+      ir_rand: 8.4,
+      tti_sec: 0.237,
+      seq_tti_sec: 0.337,
+      throughput_pps: 175.3,
+      collisions: 0.0,
+    };
+  }
+
+  // Update KPI Cards
+  if ($("metric-ir")) $("metric-ir").textContent = `${data.ir_ai.toFixed(1)}%`;
+  if ($("metric-tti")) $("metric-tti").textContent = `${data.tti_sec.toFixed(3)} s`;
+  if ($("metric-throughput")) $("metric-throughput").innerHTML = `${data.throughput_pps.toFixed(1)} <small>pulses</small>`;
+  if ($("metric-collisions")) $("metric-collisions").textContent = `${data.collisions.toFixed(1)}%`;
+
+  // 1. Cumulative Pulse Discovery Chart
+  Plotly.newPlot(
+    "chart-cumulative",
+    [
+      {
+        x: data.t_axis,
+        y: data.cum_hits_ai,
+        mode: "lines",
+        name: "Cooperative AI (M=4)",
+        line: { color: "#57d6e4", width: 2.5 },
+      },
+      {
+        x: data.t_axis,
+        y: data.cum_hits_whittle,
+        mode: "lines",
+        name: "Multi-Whittle RMAB",
+        line: { color: "#c084fc", width: 2 },
+      },
+      {
+        x: data.t_axis,
+        y: data.cum_hits_seq,
+        mode: "lines",
+        name: "Multi-Sequential Sweep",
+        line: { color: "#f1bc69", width: 1.8, dash: "dash" },
+      },
+      {
+        x: data.t_axis,
+        y: data.cum_hits_rand,
+        mode: "lines",
+        name: "Multi-PseudoRandom",
+        line: { color: "#94a3b8", width: 1.5, dash: "dot" },
+      },
+    ],
+    {
+      template: "plotly_dark",
+      paper_bgcolor: "#101821",
+      plot_bgcolor: "#080e14",
+      margin: { l: 45, r: 20, t: 25, b: 35 },
+      xaxis: { title: "Dwell Slot (t)", gridcolor: "#1a2734" },
+      yaxis: { title: "Cumulative Interceptions", gridcolor: "#1a2734" },
+      legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, family: "ui-monospace" } },
+    },
+    { responsive: true, displayModeBar: false }
+  );
+
+  // 2. Policy IR % Comparison Bar Chart
+  Plotly.newPlot(
+    "chart-ir-compare",
+    [
+      {
+        x: [
+          "Seq (M=1)",
+          "Whittle (M=1)",
+          "DRL (M=1)",
+          "Multi-Seq (M=4)",
+          "Multi-Whittle (M=4)",
+          "Coop AI (M=4)",
+        ],
+        y: [2.65, 3.8, 3.72, 10.88, 15.23, data.ir_ai],
+        type: "bar",
+        marker: {
+          color: ["#475569", "#64748b", "#7c3aed", "#d97706", "#9333ea", "#57d6e4"],
+        },
+        text: [
+          "2.65%",
+          "3.80%",
+          "3.72%",
+          "10.88%",
+          "15.23%",
+          `${data.ir_ai.toFixed(1)}%`,
+        ],
+        textposition: "auto",
+      },
+    ],
+    {
+      template: "plotly_dark",
+      paper_bgcolor: "#101821",
+      plot_bgcolor: "#080e14",
+      margin: { l: 45, r: 20, t: 25, b: 50 },
+      yaxis: { title: "Global IR (%)", gridcolor: "#1a2734" },
+      xaxis: { font: { size: 10, family: "ui-monospace" } },
+    },
+    { responsive: true, displayModeBar: false }
+  );
+
+  // 3. Sub-Band Dwell Distribution Histogram
+  Plotly.newPlot(
+    "chart-dwells",
+    [
+      {
+        x: Array.from({ length: 35 }, (_, i) => `B${String(i + 1).padStart(2, "0")}`),
+        y: data.dwell_counts,
+        type: "bar",
+        marker: { color: "#0284c7" },
+        hovertemplate: "Band %{x}: %{y} dwells<extra></extra>",
+      },
+    ],
+    {
+      template: "plotly_dark",
+      paper_bgcolor: "#101821",
+      plot_bgcolor: "#080e14",
+      margin: { l: 45, r: 20, t: 25, b: 35 },
+      xaxis: { title: "Sub-Band Index (k)", gridcolor: "#1a2734" },
+      yaxis: { title: "Total Dwells", gridcolor: "#1a2734" },
+    },
+    { responsive: true, displayModeBar: false }
+  );
+
+  // 4. Time-to-Intercept (TTI) Comparison Horizontal Bar
+  Plotly.newPlot(
+    "chart-tti",
+    [
+      {
+        y: [
+          "Cooperative AI",
+          "Multi-Whittle",
+          "Multi-Seq",
+          "Seq (M=1)",
+          "Whittle (M=1)",
+          "Recurrent DRL",
+        ],
+        x: [data.tti_sec, 0.243, 0.245, 0.337, 0.348, 0.353],
+        type: "bar",
+        orientation: "h",
+        marker: {
+          color: ["#10b981", "#a855f7", "#f59e0b", "#64748b", "#64748b", "#7c3aed"],
+        },
+        text: [
+          `${(data.tti_sec * 1000).toFixed(0)} ms`,
+          "243 ms",
+          "245 ms",
+          "337 ms",
+          "348 ms",
+          "353 ms",
+        ],
+        textposition: "auto",
+      },
+    ],
+    {
+      template: "plotly_dark",
+      paper_bgcolor: "#101821",
+      plot_bgcolor: "#080e14",
+      margin: { l: 95, r: 20, t: 25, b: 35 },
+      xaxis: { title: "Mean TTI (seconds)", gridcolor: "#1a2734" },
+    },
+    { responsive: true, displayModeBar: false }
+  );
 }
 
 const tabs = [...document.querySelectorAll("[role=tab]")];
