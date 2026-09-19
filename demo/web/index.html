@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>
+      C2-ESM: Autonomous Spectrum Surveillance &amp; Telemetry Center
+    </title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090e14;
+        --panel: #101821;
+        --edge: #273440;
+        --muted: #a4b4c0;
+        --fg: #e3ecf2;
+        --cyan: #57d6e4;
+        --green: #75dfb3;
+        --amber: #f1bc69;
+        --red: #f87171;
+        --purple: #c084fc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      button,
+      select {
+        font: inherit;
+        color: inherit;
+        background: #17232e;
+        border: 1px solid #3b5060;
+        border-radius: 4px;
+        padding: 9px 13px;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--cyan);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      button:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 4px;
+      }
+      .mono,
+      .eyebrow,
+      .stat strong {
+        font-family: ui-monospace, Consolas, monospace;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      header {
+        padding: 22px 30px 18px;
+        border-bottom: 1px solid var(--edge);
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: center;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .mark {
+        font-size: 30px;
+        color: var(--cyan);
+        border: 1px solid #427581;
+        padding: 3px 12px;
+      }
+      h1 {
+        font-size: 25px;
+        letter-spacing: 0.02em;
+        line-height: 1.2;
+        margin: 0 0 5px;
+      }
+      h2 {
+        font-size: 24px;
+        margin: 0;
+      }
+      h3 {
+        font-size: 17px;
+        margin: 0;
+      }
+      p {
+        margin: 8px 0;
+      }
+      small {
+        font-size: 13px;
+      }
+      .subtitle {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .badge {
+        font:
+          12px ui-monospace,
+          monospace;
+        letter-spacing: 0.04em;
+        padding: 6px 9px;
+        border: 1px solid #375649;
+        border-radius: 3px;
+        color: var(--green);
+        white-space: nowrap;
+      }
+      .badge.amber {
+        color: var(--amber);
+        border-color: #715b39;
+      }
+      .badge.cyan {
+        color: var(--cyan);
+        border-color: #27626d;
+      }
+      .badge.red {
+        color: var(--red);
+        border-color: #7f2b2b;
+      }
+      .badge.purple {
+        color: var(--purple);
+        border-color: #63327a;
+      }
+      .topright {
+        display: flex;
+        gap: 18px;
+        align-items: center;
+      }
+      nav {
+        padding: 0 30px;
+        display: flex;
+        gap: 30px;
+        border-bottom: 1px solid var(--edge);
+      }
+      nav button {
+        border: 0;
+        border-radius: 0;
+        padding: 18px 0;
+        background: none;
+        color: var(--muted);
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+      nav button[aria-selected="true"] {
+        color: var(--cyan);
+        border-color: var(--cyan);
+      }
+      nav b {
+        margin-right: 10px;
+        font:
+          12px ui-monospace,
+          monospace;
+        color: #91a5b5;
+      }
+      main {
+        max-width: 1600px;
+        margin: auto;
+        padding: 26px 30px;
+      }
+      .pagehead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 22px;
+      }
+      .tools {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border: 1px solid var(--edge);
+        margin-bottom: 24px;
+        background: var(--panel);
+      }
+      .stat {
+        padding: 18px 22px;
+        border-right: 1px solid var(--edge);
+      }
+      .stat:last-child {
+        border: 0;
+      }
+      .stat strong {
+        font-size: 27px;
+        font-weight: 500;
+        display: block;
+        margin: 6px 0;
+      }
+      .stat small {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
+        gap: 20px;
+      }
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--edge);
+        background: var(--panel);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      .panelhead {
+        padding: 15px 18px;
+        border-bottom: 1px solid var(--edge);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .inside {
+        padding: 18px;
+      }
+      .fleet {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+      .node {
+        border-top: 2px solid var(--cyan);
+      }
+      .node:nth-child(2) {
+        border-top-color: var(--amber);
+      }
+      .node:nth-child(3) {
+        border-top-color: var(--purple);
+      }
+      .node h3 {
+        font-size: 22px;
+      }
+      .role {
+        min-height: 48px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px 14px;
+        margin-top: 24px;
+      }
+      .metrics strong {
+        font:
+          24px ui-monospace,
+          monospace;
+        display: block;
+        margin-top: 6px;
+      }
+      .metrics label {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .track {
+        background: #273440;
+        height: 5px;
+        margin: 12px 0;
+      }
+      .track i {
+        display: block;
+        height: 100%;
+        background: var(--cyan);
+      }
+      .nodefoot {
+        padding: 12px 18px;
+        border-top: 1px solid var(--edge);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--edge);
+        font-size: 14px;
+      }
+      .row:last-child {
+        border: 0;
+      }
+      .listitem {
+        padding: 15px 18px;
+        border-bottom: 1px solid var(--edge);
+        font-size: 14px;
+      }
+      .listitem:last-child {
+        border: 0;
+      }
+      .listitem strong {
+        display: block;
+      }
+      .listitem small {
+        color: var(--muted);
+      }
+      .dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+        margin-right: 8px;
+      }
+      .heat {
+        padding: 18px;
+      }
+      .axis {
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        font:
+          12px ui-monospace,
+          monospace;
+        margin: 9px 0;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 280px;
+        background: #070d14;
+        border: 1px solid #263340;
+      }
+      .legend {
+        display: flex;
+        gap: 20px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 16px;
+        flex-wrap: wrap;
+      }
+      .swatch {
+        display: inline-block;
+        width: 12px;
+        height: 9px;
+        background: #4bd7ca;
+        margin-right: 6px;
+      }
+      .bandgrid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        margin: 12px 0;
+      }
+      .band {
+        padding: 8px 4px;
+        background: #162732;
+        color: #afc5d5;
+        text-align: center;
+        font:
+          12px ui-monospace,
+          monospace;
+        border: 1px solid #33434d;
+      }
+      .band.active {
+        background: #153e42;
+        color: var(--cyan);
+        border-color: var(--cyan);
+        font-weight: bold;
+      }
+      .band.active-amber {
+        background: #3e3215;
+        color: var(--amber);
+        border-color: var(--amber);
+        font-weight: bold;
+      }
+      .band.active-purple {
+        background: #2b173e;
+        color: var(--purple);
+        border-color: var(--purple);
+        font-weight: bold;
+      }
+      .tablewrap {
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        white-space: nowrap;
+        font-size: 14px;
+      }
+      th {
+        text-align: left;
+        font:
+          12px ui-monospace,
+          monospace;
+        color: var(--muted);
+        padding: 14px 18px;
+        background: #131e28;
+      }
+      td {
+        padding: 18px;
+        border-top: 1px solid var(--edge);
+      }
+      .stack {
+        display: grid;
+        gap: 20px;
+      }
+      .field {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 20px;
+      }
+      .field label {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .primary {
+        background: #63d5df;
+        color: #081219;
+        border-color: #63d5df;
+        font-weight: 600;
+      }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 30px;
+        border-top: 1px solid var(--edge);
+        color: var(--muted);
+        font:
+          12px ui-monospace,
+          monospace;
+      }
+      .source {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 18px 0 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .pulse {
+        color: var(--cyan);
+        font-weight: 600;
+      }
+      @media (max-width: 1100px) {
+        .fleet {
+          grid-template-columns: 1fr;
+        }
+        .role {
+          min-height: 0;
+        }
+        .metrics {
+          grid-template-columns: repeat(4, 1fr);
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 950px) {
+        .summary {
+          grid-template-columns: 1fr 1fr;
+        }
+        .stat:nth-child(2) {
+          border-right: 0;
+        }
+        .stat:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--edge);
+        }
+        header {
+          align-items: flex-start;
+        }
+        .topright {
+          flex-direction: column;
+          align-items: flex-end;
+        }
+        nav {
+          gap: 24px;
+          overflow-x: auto;
+        }
+        .pagehead {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+      @media (max-width: 550px) {
+        header,
+        main {
+          padding: 18px 16px;
+        }
+        header {
+          flex-direction: column;
+          gap: 14px;
+        }
+        .topright {
+          flex-direction: row;
+          align-items: center;
+        }
+        .mark {
+          display: none;
+        }
+        h1 {
+          font-size: 23px;
+        }
+        nav {
+          padding: 0 16px;
+        }
+        .stat {
+          padding: 14px;
+        }
+        .stat strong {
+          font-size: 23px;
+        }
+        .foot {
+          padding: 14px 16px;
+          flex-direction: column;
+        }
+        .tools {
+          width: 100%;
+        }
+        .panelhead {
+          flex-wrap: wrap;
+        }
+        .metrics {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="mark" aria-hidden="true">⌁</span>
+        <div>
+          <h1>C2-ESM</h1>
+          <div class="subtitle">
+            Autonomous Spectrum Surveillance &amp; Telemetry Center
+          </div>
+          <div class="eyebrow" style="margin-top: 6px">
+            Smart Scan EW · SIH 2026 · DRDO PS ID: 1778
+          </div>
+        </div>
+      </div>
+      <div class="topright">
+        <span class="badge cyan" id="engine-status">PYTHON EW ENGINE: CONNECTING...</span>
+        <span class="badge amber" id="mode">SIMULATION / RUNNING</span>
+        <div class="mono">
+          <span id="clock"></span>
+          <div class="eyebrow">Ground control station</div>
+        </div>
+      </div>
+    </header>
+    <nav role="tablist" aria-label="Operations views">
+      <button
+        role="tab"
+        id="tab-live"
+        aria-controls="live"
+        aria-selected="false"
+        tabindex="-1"
+      >
+        <b>01</b>Live Waterfall</button
+      ><button
+        role="tab"
+        id="tab-fleet"
+        aria-controls="fleet"
+        aria-selected="true"
+      >
+        <b>02</b>Fleet Telemetry</button
+      ><button
+        role="tab"
+        id="tab-threat"
+        aria-controls="threat"
+        aria-selected="false"
+        tabindex="-1"
+      >
+        <b>03</b>Threat Library</button
+      ><button
+        role="tab"
+        id="tab-mission"
+        aria-controls="mission"
+        aria-selected="false"
+        tabindex="-1"
+      >
+        <b>04</b>Mission Control
+      </button>
+    </nav>
+    <main>
+      <div class="pagehead">
+        <div>
+          <div class="eyebrow">
+            Operations / <span id="crumb">Fleet Telemetry</span>
+          </div>
+          <h2 id="page-title">Fleet / Multi-Payload Overview</h2>
+        </div>
+        <div class="tools">
+          <span class="muted" style="font-size: 14px" id="rate-label">Live Telemetry · 1 Hz</span>
+          <button id="pause">Pause simulation</button>
+        </div>
+      </div>
+      <div class="summary">
+        <div class="stat">
+          <span class="eyebrow">Reporting nodes</span>
+          <strong id="reporting">03 / 03</strong>
+          <small id="reporting-sub">2 airborne · 1 ground receiver</small>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Surveillance span</span>
+          <strong>0.5–18 <small>GHz</small></strong>
+          <small>35 sub-bands · 500 MHz IBW</small>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Scan strategy</span>
+          <strong id="strategy-label" style="font-size: 20px">CooperativeRoleScheduler</strong>
+          <small id="collision-label" style="color: var(--green)">0.0% Tuner Collisions [Guaranteed]</small>
+        </div>
+        <div class="stat">
+          <span class="eyebrow">Performance Figures of Merit</span>
+          <strong id="perf-summary" style="color: var(--cyan); font-size: 21px">IR: 22.2% · TTI: 237 ms</strong>
+          <small id="perf-sub">175.3 Pulses Intercepted (5.9x vs Baseline)</small>
+        </div>
+      </div>
+
+      <!-- Tab 2: Fleet Telemetry -->
+      <section id="fleet" role="tabpanel" aria-labelledby="tab-fleet">
+        <div class="fleet" id="cards"></div>
+        <div class="grid" style="margin-top: 20px">
+          <div class="panel">
+            <div class="panelhead">
+              <h3>Receiver &amp; scheduler state</h3>
+              <span class="eyebrow">Per payload node</span>
+            </div>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>NODE</th>
+                    <th>OBSERVED BAND</th>
+                    <th>FEEDBACK</th>
+                    <th>TUNER ROLE &amp; MODE</th>
+                    <th>LAST SAMPLE</th>
+                  </tr>
+                </thead>
+                <tbody id="receivers"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panelhead">
+              <h3>Health advisories</h3>
+              <span class="badge amber" id="adv-badge">NOMINAL</span>
+            </div>
+            <div class="inside">
+              <strong style="color: var(--amber)" id="adv-title">Bravo / LO synthesizer</strong>
+              <p class="muted" style="font-size: 14px" id="adv-desc">
+                60 °C advisory threshold exceeded on Node Bravo forward recon payload. Receiver remains in active hop-chasing mode.
+              </p>
+              <div class="row">
+                <span>Temperature</span>
+                <span id="alert-temp" class="mono">63.2 °C</span>
+              </div>
+              <div class="row">
+                <span>Operator review</span>
+                <span id="ack-state">Pending</span>
+              </div>
+              <button id="ack" style="margin-top: 12px">
+                Acknowledge advisory
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 1: Live Waterfall -->
+      <section id="live" role="tabpanel" aria-labelledby="tab-live" hidden>
+        <div class="grid">
+          <div class="stack">
+            <div class="panel">
+              <div class="panelhead">
+                <h3>Observed spectrum waterfall (K=35 Sub-Bands)</h3>
+                <label class="tools">
+                  <span class="eyebrow">Receiver View</span>
+                  <select id="source" aria-label="Waterfall node">
+                    <option value="all" selected>Fleet Composite (All 4 Tuners Overlaid)</option>
+                    <option value="0">Node Alpha (UAV-1: Tuner 0 - Phase Tracker)</option>
+                    <option value="1">Node Bravo (UAV-2: Tuners 1 &amp; 2 - FHSS Chasers)</option>
+                    <option value="2">Node Charlie (Ground: Tuner 3 - AoI Sentry)</option>
+                  </select>
+                </label>
+              </div>
+              <div class="heat">
+                <div class="axis">
+                  <span>NEWEST / TOP</span><span>0.5–18 GHz · 50µs Isochronous Dwell Windows</span>
+                </div>
+                <canvas
+                  id="waterfall"
+                  width="840"
+                  height="280"
+                  role="img"
+                  aria-label="Spectrum observation waterfall across 35 sub-bands"
+                ></canvas>
+                <div class="axis">
+                  <span>0.5</span><span>3.5</span><span>7.0</span><span>10.5</span><span>14.0</span><span>18.0 GHz</span>
+                </div>
+                <div class="legend">
+                  <span><i class="swatch" style="background: var(--cyan)"></i>Tuner 0 (Alpha Tracker: Hit)</span>
+                  <span><i class="swatch" style="background: var(--amber)"></i>Tuner 1 (Bravo Chaser 1)</span>
+                  <span><i class="swatch" style="background: var(--green)"></i>Tuner 2 (Bravo Chaser 2)</span>
+                  <span><i class="swatch" style="background: var(--purple)"></i>Tuner 3 (Charlie Sentry)</span>
+                  <span><i class="swatch" style="background: #203342"></i>Miss / Unoccupied</span>
+                  <span><i class="swatch" style="background: #070d14; border: 1px solid #33434d"></i>Unobserved</span>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panelhead">
+                <h3>Sub-band observation age (Age of Information - AoI)</h3>
+                <span class="eyebrow">AoI · Dwell Steps</span>
+              </div>
+              <div class="inside">
+                <div id="bands" class="bandgrid"></div>
+                <small class="muted">
+                  Outlined cells: current tuner allocations. Values: dwell steps elapsed since last receiver revisit.
+                </small>
+              </div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="panel">
+              <div class="panelhead"><h3>Current receiver observation</h3></div>
+              <div class="inside" id="observation"></div>
+            </div>
+            <div class="panel">
+              <div class="panelhead"><h3>Smart Scan EW Architecture</h3></div>
+              <div class="listitem">
+                <strong>RF Environment &amp; Truth Engine</strong>
+                <small>Gymnasium S(k,t) ground truth matrix with CA-CFAR detector.</small>
+              </div>
+              <div class="listitem">
+                <strong>Multi-Receiver Parallel Tuning</strong>
+                <small>M=4 tuners allocated with guaranteed 0.0% collision avoidance.</small>
+              </div>
+              <div class="listitem">
+                <strong>Belief &amp; Feature Tracker</strong>
+                <small>Real-time Bayesian belief state, delta-TOA PRI estimator, and AoI vectors.</small>
+              </div>
+              <div class="listitem">
+                <strong>Edge C++20 RMAB Engine</strong>
+                <small>Zero-heap Whittle Index scheduler running in 16.6 ns on CPU.</small>
+              </div>
+              <div class="listitem">
+                <strong>Figures of Merit Engine</strong>
+                <small>Rigorous Monte Carlo validation: Interception Ratio, Pd, Pfa, and TTI.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="source">
+          Real-time telemetry streamed directly from Python multi-receiver simulation engine (<code style="color:var(--cyan)">demo/dashboard.py</code>).
+        </p>
+      </section>
+
+      <!-- Tab 3: Threat Library -->
+      <section id="threat" role="tabpanel" aria-labelledby="tab-threat" hidden>
+        <div class="panel">
+          <div class="panelhead">
+            <h3>Electronic Order of Battle (EOB) Threat Registry</h3>
+            <span class="badge cyan">ACTIVE EW EMITTER TRACKS</span>
+          </div>
+          <div class="inside">
+            <p class="muted">
+              Live emitter tracks identified via online periodic delta-TOA clustering, FHSS Markov hop tracking, and CA-CFAR energy detection without prior intelligence.
+            </p>
+          </div>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>RECORD / EMITTER</th>
+                  <th>SYSTEM BEHAVIOUR</th>
+                  <th>FREQUENCY / HOPS</th>
+                  <th>ESTIMATED PRI</th>
+                  <th>ALERT LEVEL</th>
+                  <th>TRACK STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="eob-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top: 20px">
+          <div class="panelhead">
+            <h3>Intercepted Pulse Descriptor Words (PDW Stream)</h3>
+            <div style="display: flex; gap: 10px; align-items: center">
+              <button id="btn-export-csv" class="primary">📥 Export PDW (CSV)</button>
+              <button id="btn-export-json">📥 Export PDW (JSON)</button>
+            </div>
+          </div>
+          <div class="inside" style="padding-bottom: 0">
+            <span class="muted" style="font-size: 14px" id="pdw-count">Live stream of captured radar pulses</span>
+          </div>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>TIMESTAMP</th>
+                  <th>TUNER / RECEIVER</th>
+                  <th>BAND / FREQUENCY</th>
+                  <th>RSSI (dBm)</th>
+                  <th>PULSE WIDTH</th>
+                  <th>DETECTION STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="pdw-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 4: Mission Control -->
+      <section
+        id="mission"
+        role="tabpanel"
+        aria-labelledby="tab-mission"
+        hidden
+      >
+        <div class="grid">
+          <div class="stack">
+            <div class="panel">
+              <div class="panelhead">
+                <h3>Live Simulation Configuration</h3>
+                <span class="badge green">REAL-TIME CONTROL</span>
+              </div>
+              <div class="inside">
+                <div class="field">
+                  <label for="policy-select">Active Scheduler Policy</label>
+                  <select id="policy-select">
+                    <option value="CooperativeRoleScheduler" selected>CooperativeRoleScheduler (M=4, Phase Tracker + Dual FHSS + Sentry)</option>
+                    <option value="MultiWhittleRMAB">MultiWhittleRMAB (M=4, C++20 Zero-Allocation Engine &lt;100ns)</option>
+                    <option value="MultiSequentialSweep">MultiSequentialSweep (M=4 Baseline)</option>
+                    <option value="MultiPseudoRandomSweep">MultiPseudoRandomSweep (M=4 Baseline)</option>
+                    <option value="DRLScheduler-RecurrentPPO">DRLScheduler-RecurrentPPO (M=1 Dynamic 4M Checkpoint)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="preset-select">Battlefield RF Scenario Preset</label>
+                  <select id="preset-select">
+                    <option value="standard_mixed" selected>Standard Mixed Scenario (Fixed + 2x FHSS + Scanning)</option>
+                    <option value="dense_agile">Dense Agile Scenario (Heavy Multi-Emitter FHSS)</option>
+                    <option value="fast_scanning">Fast Scanning Radar Threat</option>
+                    <option value="turing_synthetic">Turing Synthetic Emitter Preset</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="speed-select">Simulation Telemetry Rate</label>
+                  <select id="speed-select">
+                    <option value="1000" selected>1 Hz (1000 ms - Real-Time TOC Pacing)</option>
+                    <option value="300">~3.3 Hz (300 ms - High Speed Telemetry)</option>
+                    <option value="100">10 Hz (100 ms - Maximum Velocity)</option>
+                  </select>
+                </div>
+                <button class="primary" id="btn-apply-config" type="button" style="margin-top: 6px">
+                  Apply &amp; Reset Simulation
+                </button>
+                <p id="save-status" role="status" class="muted" style="margin-top: 12px; font-size: 13px">
+                  Active policy communicates directly with the Python/C++ simulation runtime.
+                </p>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panelhead"><h3>Session Event Log (Live SIGINT Feed)</h3></div>
+              <div id="events"></div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="panel">
+              <div class="panelhead"><h3>Project Integration &amp; Hardware Status</h3></div>
+              <div class="inside">
+                <div class="row">
+                  <span>RF Simulation Engine</span>
+                  <span class="badge" style="border:0; padding:0; color:var(--green)">MultiReceiverEWSpectrumEnv (K=35, M=4)</span>
+                </div>
+                <div class="row">
+                  <span>Whittle RMAB Engine</span>
+                  <span class="badge" style="border:0; padding:0; color:var(--cyan)">C++20 rmab_cpp (16.6 ns latency)</span>
+                </div>
+                <div class="row">
+                  <span>Dwell Timing Harness</span>
+                  <span class="badge" style="border:0; padding:0; color:var(--green)">50 µs Window (0.041 µs jitter)</span>
+                </div>
+                <div class="row">
+                  <span>Edge DRL Inference</span>
+                  <span class="badge" style="border:0; padding:0; color:var(--purple)">ONNX multi_drl_scheduler (91 µs CPU)</span>
+                </div>
+                <div class="row">
+                  <span>DRDO Benchmark IR</span>
+                  <span class="mono" style="color:var(--cyan); font-weight:600">22.17% (5.9x vs M=1 Baseline)</span>
+                </div>
+                <div class="row">
+                  <span>Tuner Collisions</span>
+                  <span class="mono" style="color:var(--green); font-weight:600">0.0% (Zero Collision Guarantee)</span>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panelhead"><h3>Tactical TOC Reference</h3></div>
+              <div class="inside">
+                <p><strong>Smart Scan EW: Autonomous Receiver Scheduling</strong></p>
+                <p class="muted" style="font-size: 14px">
+                  DRDO SIH 2026 · PS ID: 1778 · Team Robotics &amp; Drones
+                </p>
+                <p class="source">
+                  Engineered with Restless Multi-Armed Bandits (RMAB), phase-locked delta-TOA tracking, online Markov FHSS prediction, and hardware-accelerated C++20 execution for target deployment on NVIDIA Jetson Orin Nano.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="foot">
+      <span>C2-ESM / AUTONOMOUS SPECTRUM SURVEILLANCE CENTER</span>
+      <span id="freshness">LIVE PYTHON SIMULATION · K=35 SUB-BANDS · M=4 TUNERS</span>
+      <span>DRDO SIH 2026 · PS ID: 1778</span>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>

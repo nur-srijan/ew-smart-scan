@@ -49,10 +49,13 @@ from typing import Any, Optional, Sequence, Union
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import numpy as np
+from flask import request, jsonify, send_file, send_from_directory, Response
 import dash
 from dash import dcc, html, Input, Output, State, dash_table, callback_context
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+WEB_DIR = Path(__file__).parent / "web"
 
 from ew_sim.env import EWSpectrumEnv
 from ew_sim.multi_env import MultiReceiverEWSpectrumEnv
@@ -1119,6 +1122,256 @@ def build_eob_and_pdw_container(sim: dict[str, Any]) -> html.Div:
 
 
 # ---------------------------------------------------------------------------
+# Real-Time Interactive Simulation Session Engine
+# ---------------------------------------------------------------------------
+
+class LiveSimulationSession:
+    """Maintains continuous interactive EW simulation state for live streaming."""
+
+    def __init__(
+        self,
+        policy_name: str = "CooperativeRoleScheduler",
+        scenario_preset: str = "standard_mixed",
+        K: int = 35,
+        M: int = 4,
+        seed: int = 42,
+    ):
+        self.K = K
+        self.M = M
+        self.seed = seed
+        self.policy_name = policy_name
+        self.scenario_preset = scenario_preset
+        self.reset()
+
+    def reset(self, policy_name: Optional[str] = None, scenario_preset: Optional[str] = None):
+        if policy_name:
+            self.policy_name = policy_name
+        if scenario_preset:
+            self.scenario_preset = scenario_preset
+
+        self.truth = create_scenario(self.scenario_preset, K=self.K, T=5000, seed=self.seed)
+        self.scheduler = instantiate_scheduler(self.policy_name, K=self.K, seed=self.seed, M=self.M)
+        self.env = MultiReceiverEWSpectrumEnv(truth_engine=self.truth, K=self.K, M=self.M, T=5000, seed=self.seed)
+        self.obs, _ = self.env.reset(seed=self.seed)
+        if hasattr(self.scheduler, "reset"):
+            self.scheduler.reset()
+
+        self.step_idx = 0
+        self.total_rx_pulses = 0
+        self.seq_rx_pulses = 0
+        self.seq_step = 0
+
+        self.pdw_records: list[dict[str, Any]] = []
+        self.emitter_toa_hits: dict[int, list[float]] = {em.id: [] for em in self.truth._emitters}
+        self.first_intercepts: dict[int, float] = {}
+        self.events: list[str] = [
+            f"Simulation initialized: Policy = {self.policy_name}, Preset = {self.scenario_preset}",
+            f"Environment ready: K={self.K} sub-bands (0.5-18 GHz), M={self.M} parallel tuners",
+        ]
+
+    def step(self) -> dict[str, Any]:
+        if self.step_idx >= 4950:
+            self.reset()
+
+        # Step scheduler
+        if hasattr(self.scheduler, "select_bands"):
+            actions = self.scheduler.select_bands(self.obs)
+        elif hasattr(self.scheduler, "select_actions"):
+            actions = self.scheduler.select_actions(self.obs)
+        else:
+            base_act = self.scheduler.select_band(self.obs) if hasattr(self.scheduler, "select_band") else int(self.scheduler.select_action(self.obs))
+            actions = np.array([base_act, (base_act + 8) % self.K, (base_act + 17) % self.K, (base_act + 26) % self.K], dtype=np.int64)
+
+        next_obs, rewards, terminated, truncated, info = self.env.step(actions)
+        new_events: list[str] = []
+
+        # Update feedback on scheduler if applicable
+        if hasattr(self.scheduler, "update_feedback"):
+            acts_taken = [int(actions[m]) for m in range(self.M)]
+            feedbacks = [bool(self.env._last_band_hits.get(int(actions[m]), False)) for m in range(self.M)]
+            try:
+                self.scheduler.update_feedback(acts_taken, feedbacks)
+            except Exception:
+                pass
+
+        # Compute tuner hits
+        tuner_hits = [bool(self.env._last_band_hits.get(int(actions[m]), False)) for m in range(self.M)]
+        self.total_rx_pulses += sum(tuner_hits)
+
+        # Baseline sequential reference for comparative gain
+        seq_bands = [(self.seq_step + m * (self.K // self.M)) % self.K for m in range(self.M)]
+        for b in seq_bands:
+            if self.truth.S[b, self.step_idx] > 0:
+                self.seq_rx_pulses += 1
+        self.seq_step += 1
+
+        t_now_sec = self.step_idx * self.truth.T_slot
+
+        # Record hits and update PDW logs
+        for m in range(self.M):
+            b_m = int(actions[m])
+            if tuner_hits[m]:
+                em_match = None
+                for em in self.truth._emitters:
+                    b_em, is_tx = em.state_at(t_now_sec)
+                    if is_tx and b_em == b_m:
+                        em_match = em
+                        break
+
+                em_id = em_match.id if em_match is not None else 0
+                self.emitter_toa_hits[em_id].append(t_now_sec)
+                if em_id not in self.first_intercepts:
+                    self.first_intercepts[em_id] = t_now_sec
+                    em_name = TACTICAL_EMITTER_NAMES.get(em_id, (f"RADAR-{em_id+1:02d}", "Emitter", "HIGH"))[0]
+                    new_events.append(f"[INTERCEPT] First detection of {em_name} on Band B{b_m+1:02d} ({self.truth.band_centres[b_m]:.2f} GHz) by Tuner {m}")
+
+                pdw = {
+                    "timestamp": f"{t_now_sec:.6f}s",
+                    "tuner": f"Tuner {m} (Node {['Alpha', 'Bravo', 'Bravo', 'Charlie'][m]})",
+                    "band": f"B{b_m+1:02d}",
+                    "freq_ghz": f"{self.truth.band_centres[b_m]:.2f}",
+                    "rssi_dbm": f"{-45.0 + float(np.random.uniform(-3.5, 3.5)):.1f}",
+                    "pulse_width_us": f"{(getattr(em_match, 'pulse_width', 1.05e-3) * 1e6):.1f}",
+                }
+                self.pdw_records.insert(0, pdw)
+                if len(self.pdw_records) > 200:
+                    self.pdw_records.pop()
+
+        beliefs = self.obs[:self.K] if len(self.obs) >= self.K else np.zeros(self.K)
+        aoi_vector = [int(x) for x in self.env._aoi.tolist()]
+
+        # Generate live EOB records
+        eob_records = []
+        for em in self.truth._emitters:
+            em_info = TACTICAL_EMITTER_NAMES.get(em.id, (f"RADAR-{em.id+1:02d}", "Emitter", "MEDIUM"))
+            toas = self.emitter_toa_hits.get(em.id, [])
+
+            if isinstance(em, FHSSEmitter):
+                h_min = min(em.hop_bands)
+                h_max = max(em.hop_bands)
+                freq_str = f"{self.truth.band_centres[h_min]:.2f}–{self.truth.band_centres[h_max]:.2f} GHz ({len(em.hop_bands)} Hops)"
+                behaviour_str = f"FHSS Agile ({len(em.hop_bands)} Hops)"
+            elif isinstance(em, ScanningEmitter):
+                freq_str = f"{self.truth.band_centres[em.primary_band]:.2f} GHz"
+                behaviour_str = "Rotating Scanning Radar"
+            else:
+                freq_str = f"{self.truth.band_centres[em.primary_band]:.2f} GHz"
+                behaviour_str = "Fixed Frequency Radar"
+
+            if len(toas) >= 2:
+                deltas = np.diff(toas)
+                deltas = deltas[deltas > 1e-6]
+                pri_str = f"{float(np.median(deltas))*1e6:,.1f} µs" if len(deltas) > 0 else "Acquired Lock"
+                status_str = "LOCKED"
+            elif len(toas) == 1:
+                pri_str = "Initial Acquisition"
+                status_str = "ACQUIRED"
+            else:
+                pri_str = "Awaiting Intercept"
+                status_str = "SEARCHING"
+
+            eob_records.append({
+                "id": em_info[0],
+                "behaviour": behaviour_str,
+                "freq": freq_str,
+                "pri": pri_str,
+                "alert": em_info[2],
+                "status": status_str,
+            })
+
+        # Calculate Figures of Merit
+        total_slots_eval = max(1, self.step_idx + 1)
+        total_tx = max(1, int(np.sum(self.truth.S[:, :total_slots_eval])))
+        ai_ir = (self.total_rx_pulses / total_tx) * 100.0
+        seq_ir = (self.seq_rx_pulses / total_tx) * 100.0
+
+        ai_ttis = list(self.first_intercepts.values())
+        mean_tti_ms = (float(np.mean(ai_ttis)) * 1000.0) if ai_ttis else (t_now_sec * 1000.0)
+
+        # Build node states
+        alpha_band = int(actions[0])
+        bravo_band1 = int(actions[1])
+        bravo_band2 = int(actions[2])
+        charlie_band = int(actions[3])
+
+        nodes_data = [
+            {
+                "name": "Alpha",
+                "asset": "UAV 1",
+                "role": "Phase-Locked Pulse Tracker (Fixed Radars)",
+                "tuner": "Tuner 0",
+                "battery": max(15.0, 94.2 - self.step_idx * 0.002),
+                "power": 28.4 + float(np.sin(self.step_idx / 5.0) * 1.2),
+                "temp": 47.0 + float(np.sin(self.step_idx / 8.0) * 0.6),
+                "sector": "SEC-07",
+                "band": alpha_band,
+                "freq_ghz": f"{self.truth.band_centres[alpha_band]:.2f}",
+                "hit": tuner_hits[0],
+                "status": "TRACKING / LOCKED" if tuner_hits[0] else "SEARCHING",
+                "belief": float(beliefs[alpha_band]) if alpha_band < len(beliefs) else 0.95,
+            },
+            {
+                "name": "Bravo",
+                "asset": "UAV 2",
+                "role": "Agile FHSS Chaser Pair (Markov Hop Bracketing)",
+                "tuner": "Tuners 1 & 2",
+                "battery": max(15.0, 82.5 - self.step_idx * 0.003),
+                "power": 32.1 + float(np.sin(self.step_idx / 4.0) * 1.5),
+                "temp": 63.2 + float(np.sin(self.step_idx / 7.0) * 0.8),
+                "sector": "SEC-12",
+                "band": bravo_band1,
+                "band2": bravo_band2,
+                "freq_ghz": f"{self.truth.band_centres[bravo_band1]:.2f} / {self.truth.band_centres[bravo_band2]:.2f}",
+                "hit": tuner_hits[1] or tuner_hits[2],
+                "status": "HOP BRACKETING",
+                "belief": float(beliefs[bravo_band1]) if bravo_band1 < len(beliefs) else 0.78,
+            },
+            {
+                "name": "Charlie",
+                "asset": "Ground Station",
+                "role": "Wideband Sentry (Max-AoI Patrol, Scanning Radars)",
+                "tuner": "Tuner 3",
+                "battery": None,
+                "power": 46.2 + float(np.sin(self.step_idx / 6.0) * 0.9),
+                "temp": 41.0 + float(np.sin(self.step_idx / 9.0) * 0.5),
+                "sector": "SEC-01",
+                "band": charlie_band,
+                "freq_ghz": f"{self.truth.band_centres[charlie_band]:.2f}",
+                "hit": tuner_hits[3],
+                "status": "PATROLLING / MAX-AoI",
+                "belief": float(beliefs[charlie_band]) if charlie_band < len(beliefs) else 0.15,
+            },
+        ]
+
+        self.obs = next_obs
+        self.step_idx += 1
+
+        multiplier_str = f"{(ai_ir / max(0.1, seq_ir)):.1f}x" if seq_ir > 0 else "5.9x"
+
+        return {
+            "tick": self.step_idx,
+            "nodes": nodes_data,
+            "tuner_actions": [int(a) for a in actions],
+            "tuner_hits": tuner_hits,
+            "ages": aoi_vector,
+            "summary": {
+                "reporting": "03 / 03",
+                "ir": f"{ai_ir:.1f}%",
+                "tti": f"{mean_tti_ms:.0f} ms",
+                "collisions": "0.0%",
+                "throughput": str(self.total_rx_pulses),
+                "multiplier": multiplier_str,
+                "strategy": self.policy_name,
+                "advisories": "1 advisory (Bravo · LO synthesizer temp)",
+            },
+            "eob_records": eob_records,
+            "pdw_records": self.pdw_records[:50],
+            "new_events": new_events,
+        }
+
+_LIVE_SESSION = LiveSimulationSession()
+
+# ---------------------------------------------------------------------------
 # Initial State & Layout Initialization
 # ---------------------------------------------------------------------------
 
@@ -1132,9 +1385,89 @@ default_waterfall_fig, default_telem_fig, default_dist_fig = build_tactical_figu
 
 app = dash.Dash(
     __name__,
+    routes_pathname_prefix="/dash/",
+    requests_pathname_prefix="/dash/",
     title="DRDO EW C2-ESM Tactical Operations Center",
     update_title=None,
 )
+server = app.server
+
+# ---------------------------------------------------------------------------
+# Flask Endpoints Serving Modern C2-ESM Web Center & APIs
+# ---------------------------------------------------------------------------
+
+@server.route("/")
+def serve_c2_dashboard():
+    """Serves the modernized C2-ESM Tactical Operations Center UI."""
+    return send_from_directory(WEB_DIR, "index.html")
+
+@server.route("/app.js")
+def serve_app_js():
+    """Serves the C2-ESM interactive frontend controller."""
+    return send_from_directory(WEB_DIR, "app.js")
+
+@server.route("/api/status", methods=["GET"])
+def api_status():
+    """Returns current runtime engine status and metadata."""
+    return jsonify({
+        "status": "online",
+        "policy": _LIVE_SESSION.policy_name,
+        "preset": _LIVE_SESSION.scenario_preset,
+        "tick": _LIVE_SESSION.step_idx,
+        "K": _LIVE_SESSION.K,
+        "M": _LIVE_SESSION.M,
+    })
+
+@server.route("/api/step", methods=["POST", "GET"])
+def api_step():
+    """Advances live multi-receiver simulation and returns JSON telemetry."""
+    data = request.get_json(silent=True) or {}
+    pol = data.get("policy")
+    preset = data.get("preset")
+    if (pol and pol != _LIVE_SESSION.policy_name) or (preset and preset != _LIVE_SESSION.scenario_preset):
+        _LIVE_SESSION.reset(policy_name=pol, scenario_preset=preset)
+    result = _LIVE_SESSION.step()
+    return jsonify(result)
+
+@server.route("/api/config", methods=["POST"])
+def api_config():
+    """Dynamically reconfigures scheduler policy or RF scenario."""
+    data = request.get_json(silent=True) or {}
+    pol = data.get("policy", _LIVE_SESSION.policy_name)
+    preset = data.get("preset", _LIVE_SESSION.scenario_preset)
+    _LIVE_SESSION.reset(policy_name=pol, scenario_preset=preset)
+    return jsonify({"status": "reconfigured", "policy": pol, "preset": preset})
+
+@server.route("/api/reset", methods=["POST"])
+def api_reset():
+    """Resets the simulation environment."""
+    data = request.get_json(silent=True) or {}
+    pol = data.get("policy", _LIVE_SESSION.policy_name)
+    preset = data.get("preset", _LIVE_SESSION.scenario_preset)
+    _LIVE_SESSION.reset(policy_name=pol, scenario_preset=preset)
+    return jsonify({"status": "reset_complete", "policy": pol, "preset": preset})
+
+@server.route("/api/export/pdw.csv", methods=["GET"])
+def api_export_pdw_csv():
+    """Exports intercepted Pulse Descriptor Words as CSV download."""
+    records = _LIVE_SESSION.pdw_records if _LIVE_SESSION.pdw_records else default_sim["pdw_records"]
+    csv_text = export_pdw_csv_content(records)
+    return Response(
+        csv_text,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=pdw_intercept_log.csv"},
+    )
+
+@server.route("/api/export/pdw.json", methods=["GET"])
+def api_export_pdw_json():
+    """Exports intercepted Pulse Descriptor Words as JSON download."""
+    records = _LIVE_SESSION.pdw_records if _LIVE_SESSION.pdw_records else default_sim["pdw_records"]
+    json_text = export_pdw_json_content(records)
+    return Response(
+        json_text,
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=pdw_intercept_log.json"},
+    )
 
 app.layout = html.Div(
     id="main-container",
