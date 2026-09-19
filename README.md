@@ -1,12 +1,12 @@
 # EW Smart Scan — Autonomous Multi-Receiver Electronic Support Scheduler
-**Smart India Hackathon 2026 · Problem Statement 1778 · Sponsoring Org: DRDO · Theme: Robotics & Drones**
+**Smart India Hackathon 2026 · Problem Statement 26055 · Sponsoring Org: DRDO · Theme: Robotics & Drones**
 
 [![Tests](https://img.shields.io/badge/Tests-279%2F279%20Passing-brightgreen.svg)](#test-suite--validation)
 [![Engine](https://img.shields.io/badge/C%2B%2B20%20Core-20.8%20ns%20Latency-blue.svg)](#ultra-fast-c20-scheduling-core)
 [![Collisions](https://img.shields.io/badge/Tuner%20Collisions-0.0%25%20Guaranteed-teal.svg)](#fleet-cooperative-architecture)
 [![Python](https://img.shields.io/badge/Python-3.12%20|%20uv-yellow.svg)](#quickstart-guide)
 
-An autonomous, multi-agent Electronic Support (ES) surveillance platform powered by **Restless Multi-Armed Bandits (RMAB)**, **Recurrent Deep Reinforcement Learning (DRL)**, and a **zero-allocation C++20 real-time engine**. Designed for DRDO Problem Statement 1778, Smart Scan intercepts, deinterleaves, and tracks frequency-agile and scanning emitters across 0.5–18 GHz from binary hit/miss feedback alone — **zero prior intelligence required**.
+An autonomous, multi-agent Electronic Support (ES) surveillance platform powered by **Restless Multi-Armed Bandits (RMAB)**, **Recurrent Deep Reinforcement Learning (DRL)**, and a **zero-allocation C++20 real-time engine**. Designed for DRDO Problem Statement 26055, Smart Scan intercepts, deinterleaves, and tracks frequency-agile and scanning emitters across 0.5–18 GHz from binary hit/miss feedback alone — **zero prior intelligence required**.
 
 ---
 
