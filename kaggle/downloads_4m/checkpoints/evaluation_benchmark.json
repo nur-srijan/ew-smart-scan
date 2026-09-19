@@ -1,0 +1,23 @@
+{
+  "SequentialSweep": {
+    "ir_mean": 2.8716152007373665,
+    "ir_std": 0.7442346461394027,
+    "hits_mean": 16.5,
+    "discovery_mean": 76.41666666666666,
+    "tti_mean": 0.2845718749999999
+  },
+  "PseudoRandomSweep": {
+    "ir_mean": 2.9565414494789026,
+    "ir_std": 0.5653339970511486,
+    "hits_mean": 17.35,
+    "discovery_mean": 73.66666666666667,
+    "tti_mean": 0.263552625
+  },
+  "DRL-Dynamic-4M": {
+    "ir_mean": 3.5703011888771505,
+    "ir_std": 1.0347625871128048,
+    "hits_mean": 20.55,
+    "discovery_mean": 74.33333333333334,
+    "tti_mean": 0.3453248749999999
+  }
+}

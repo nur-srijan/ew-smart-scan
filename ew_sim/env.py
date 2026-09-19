@@ -44,6 +44,7 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from ew_sim.truth_engine import TruthEngine, build_default_truth_engine
+from ew_sim.emitters import FixedFrequencyEmitter, FHSSEmitter, ScanningEmitter
 
 
 # ---------------------------------------------------------------------------
@@ -348,3 +349,234 @@ class EWSpectrumEnv(gym.Env):
     @property
     def discovery_ratio(self) -> float:
         return len(self._discovered) / max(len(self.truth._emitters), 1)
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Domain-Randomized Environment
+# ---------------------------------------------------------------------------
+
+class DynamicSpectrumEnv(EWSpectrumEnv):
+    """
+    Dynamic Electronic Warfare Spectrum Scanning Environment.
+
+    Regenerates a randomized RF tactical battlefield on EVERY episode reset.
+    Guarantees that policies learn generalized tracking and patrolling behaviors
+    driven by the observation state (belief & AoI) rather than memorizing fixed band indices.
+
+    Parameters
+    ----------
+    K                   : Number of sub-bands (default: 35)
+    T                   : Episode duration in time slots (default: 1000)
+    stage               : Curriculum stage (1: Fixed only, 2: Fixed+FHSS, 3: Full battlefield, None: Fully random)
+    num_emitters_range  : (min_emitters, max_emitters) active per episode
+    dwell_us            : Receiver dwell time in microseconds (default: 1000.0)
+    switch_us           : LO tuning time in microseconds (default: 50.0)
+    Pd                  : Probability of detection
+    Pfa                 : Probability of false alarm
+    noise_floor         : Ground-truth spurious occupancy rate
+    seed                : Random seed
+    """
+
+    def __init__(
+        self,
+        K: int = 35,
+        T: int = 1000,
+        stage: Optional[int] = 3,
+        num_emitters_range: tuple[int, int] = (2, 5),
+        dwell_us: float = 1000.0,
+        switch_us: float = 50.0,
+        Pd: float = 0.95,
+        Pfa: float = 1e-4,
+        w_hit: float = 6.0,
+        w_new: float = 40.0,
+        w_aoi: float = 2.5,
+        w_switch: float = 0.2,
+        aoi_max: int = 200,
+        noise_floor: float = 0.0,
+        seed: Optional[int] = None,
+        render_mode: Optional[str] = None,
+    ):
+        self.stage = stage
+        self.num_emitters_range = num_emitters_range
+        self.dwell_us = dwell_us
+        self.switch_us = switch_us
+        self.noise_floor = noise_floor
+        self._seed = seed
+
+        rng = np.random.default_rng(seed)
+        initial_truth = self._build_randomized_truth(rng, K, T)
+
+        super().__init__(
+            truth_engine=initial_truth,
+            K=K,
+            T=T,
+            Pd=Pd,
+            Pfa=Pfa,
+            w_hit=w_hit,
+            w_new=w_new,
+            w_aoi=w_aoi,
+            w_switch=w_switch,
+            aoi_max=aoi_max,
+            seed=seed,
+            render_mode=render_mode,
+        )
+
+    def _build_randomized_truth(self, rng: np.random.Generator, K: int, T: int) -> TruthEngine:
+        """Constructs a randomized TruthEngine based on current stage."""
+        engine = TruthEngine(
+            K=K,
+            T=T,
+            dwell_us=self.dwell_us,
+            switch_us=self.switch_us,
+            noise_floor=self.noise_floor,
+            rng=rng,
+        )
+        t_slot = engine.T_slot
+        emitters = []
+        eid = 0
+
+        # Available bands for allocation without collision
+        all_bands = list(range(K))
+        rng.shuffle(all_bands)
+
+        if self.stage == 1:
+            # Stage 1: Fixed frequency radars on random bands
+            n_emitters = int(rng.integers(self.num_emitters_range[0], self.num_emitters_range[1] + 1))
+            for i in range(min(n_emitters, len(all_bands))):
+                band = all_bands[i]
+                pri_slots = float(rng.uniform(3.0, 12.0))
+                pri_sec = pri_slots * t_slot
+                jitter = float(rng.uniform(0.0, 0.08))
+                emitters.append(
+                    FixedFrequencyEmitter(
+                        emitter_id=eid,
+                        band_index=band,
+                        pri_sec=pri_sec,
+                        pulse_width=t_slot,
+                        pri_jitter=jitter,
+                        rng=rng,
+                    )
+                )
+                eid += 1
+
+        elif self.stage == 2:
+            # Stage 2: 1-2 Fixed + 1-2 FHSS agile emitters
+            n_fixed = int(rng.integers(1, 3))
+            for i in range(n_fixed):
+                band = all_bands[i]
+                pri_slots = float(rng.uniform(4.0, 10.0))
+                emitters.append(
+                    FixedFrequencyEmitter(
+                        emitter_id=eid,
+                        band_index=band,
+                        pri_sec=pri_slots * t_slot,
+                        pulse_width=t_slot,
+                        pri_jitter=float(rng.uniform(0.0, 0.05)),
+                        rng=rng,
+                    )
+                )
+                eid += 1
+
+            n_fhss = int(rng.integers(1, 3))
+            for _ in range(n_fhss):
+                hop_len = int(rng.integers(4, 8))
+                hop_bands = list(rng.choice(K, size=min(hop_len, K), replace=False))
+                hop_interval_slots = float(rng.uniform(6.0, 12.0))
+                emitters.append(
+                    FHSSEmitter(
+                        emitter_id=eid,
+                        hop_bands=hop_bands,
+                        hop_interval=hop_interval_slots * t_slot,
+                        pri_sec=2.0 * t_slot,
+                        pulse_width=t_slot,
+                        burst_size=int(rng.integers(2, 4)),
+                        rng=rng,
+                    )
+                )
+                eid += 1
+
+        else:
+            # Stage 3 or None: Full tactical battlefield (Fixed + FHSS + Scanning)
+            n_fixed = int(rng.integers(1, 3))
+            for i in range(n_fixed):
+                band = all_bands[i]
+                pri_slots = float(rng.uniform(4.0, 12.0))
+                emitters.append(
+                    FixedFrequencyEmitter(
+                        emitter_id=eid,
+                        band_index=band,
+                        pri_sec=pri_slots * t_slot,
+                        pulse_width=t_slot,
+                        pri_jitter=float(rng.uniform(0.01, 0.08)),
+                        rng=rng,
+                    )
+                )
+                eid += 1
+
+            n_fhss = int(rng.integers(1, 3))
+            for _ in range(n_fhss):
+                hop_len = int(rng.integers(4, 7))
+                hop_bands = list(rng.choice(K, size=min(hop_len, K), replace=False))
+                hop_interval_slots = float(rng.uniform(6.0, 12.0))
+                emitters.append(
+                    FHSSEmitter(
+                        emitter_id=eid,
+                        hop_bands=hop_bands,
+                        hop_interval=hop_interval_slots * t_slot,
+                        pri_sec=2.0 * t_slot,
+                        pulse_width=t_slot,
+                        burst_size=int(rng.integers(2, 4)),
+                        rng=rng,
+                    )
+                )
+                eid += 1
+
+            # Scanning Radar
+            scan_band = int(rng.choice(all_bands[n_fixed:])) if len(all_bands) > n_fixed else int(rng.integers(0, K))
+            t_scan = float(rng.uniform(1.5, 3.5))
+            beamwidth = float(rng.uniform(8.0, 15.0))
+            init_angle = float(rng.uniform(0.0, 360.0))
+            emitters.append(
+                ScanningEmitter(
+                    emitter_id=eid,
+                    band_index=scan_band,
+                    T_scan_sec=t_scan,
+                    beamwidth_deg=beamwidth,
+                    pri_sec=2.0 * t_slot,
+                    pulse_width=t_slot,
+                    initial_angle=init_angle,
+                    rng=rng,
+                )
+            )
+            eid += 1
+
+        engine.add_emitters(emitters)
+        engine.build(verbose=False)
+        return engine
+
+    def reset(
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None,
+    ) -> tuple[np.ndarray, dict]:
+        """Reset environment and generate a brand-new randomized tactical scenario."""
+        super().reset(seed=seed, options=options)
+        if seed is not None:
+            self._rng = np.random.default_rng(seed)
+
+        # Regenerate truth engine with dynamic domain randomization
+        self.truth = self._build_randomized_truth(self._rng, self.K, self.T)
+
+        # Reset episode counters and tracking
+        self._t = 0
+        self._belief = np.ones(self.K, dtype=np.float32) * 0.5
+        self._aoi = np.zeros(self.K, dtype=np.float32)
+        self._last_action = 0
+        self._consecutive_dwells = 0
+        self._discovered = set()
+        self._total_hits = 0
+        self._total_dwells = 0
+        self._false_alarms = 0
+
+        return self._get_obs(), self._get_info()

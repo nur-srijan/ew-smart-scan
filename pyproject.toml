@@ -27,6 +27,10 @@ dashboard = [
     "plotly>=5.22",
     "dash>=2.17",
 ]
+edge = [
+    "onnx>=1.23.0",
+    "onnxruntime>=1.30.0",
+]
 
 [build-system]
 requires = ["hatchling"]

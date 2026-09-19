@@ -25,7 +25,7 @@ import torch
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 
-from ew_sim.env import EWSpectrumEnv
+from ew_sim.env import EWSpectrumEnv, DynamicSpectrumEnv
 from ew_sim.emitters import FixedFrequencyEmitter, FHSSEmitter, ScanningEmitter
 from ew_sim.truth_engine import TruthEngine
 from schedulers.drl_agent import DRLScheduler
@@ -52,8 +52,10 @@ class FoMEvaluationCallback(BaseCallback):
         return True
 
 
-def create_stage1_env(K: int = 35, T: int = 2000, seed: int = 101) -> EWSpectrumEnv:
+def create_stage1_env(K: int = 35, T: int = 1000, seed: int = 101, dynamic: bool = True) -> EWSpectrumEnv:
     """Stage 1: Fixed frequency emitters only."""
+    if dynamic:
+        return DynamicSpectrumEnv(K=K, T=T, stage=1, seed=seed)
     engine = TruthEngine(K=K, T=T, dwell_us=1000, switch_us=50, rng=np.random.default_rng(seed))
     engine.add_emitters([
         FixedFrequencyEmitter(0, band_index=4, pri_sec=5.25e-3, pulse_width=1.05e-3),
@@ -64,8 +66,10 @@ def create_stage1_env(K: int = 35, T: int = 2000, seed: int = 101) -> EWSpectrum
     return EWSpectrumEnv(truth_engine=engine, K=K, T=T, seed=seed)
 
 
-def create_stage2_env(K: int = 35, T: int = 2000, seed: int = 102) -> EWSpectrumEnv:
+def create_stage2_env(K: int = 35, T: int = 1000, seed: int = 102, dynamic: bool = True) -> EWSpectrumEnv:
     """Stage 2: Adds frequency hopping emitters."""
+    if dynamic:
+        return DynamicSpectrumEnv(K=K, T=T, stage=2, seed=seed)
     engine = TruthEngine(K=K, T=T, dwell_us=1000, switch_us=50, rng=np.random.default_rng(seed))
     engine.add_emitters([
         FixedFrequencyEmitter(0, band_index=4, pri_sec=5.25e-3, pulse_width=1.05e-3),
@@ -76,8 +80,10 @@ def create_stage2_env(K: int = 35, T: int = 2000, seed: int = 102) -> EWSpectrum
     return EWSpectrumEnv(truth_engine=engine, K=K, T=T, seed=seed)
 
 
-def create_stage3_env(K: int = 35, T: int = 2000, seed: int = 103) -> EWSpectrumEnv:
+def create_stage3_env(K: int = 35, T: int = 1000, seed: int = 103, dynamic: bool = True) -> EWSpectrumEnv:
     """Stage 3: Full complex battlefield with scanning radar and hopping radars."""
+    if dynamic:
+        return DynamicSpectrumEnv(K=K, T=T, stage=3, seed=seed)
     engine = TruthEngine(K=K, T=T, dwell_us=1000, switch_us=50, rng=np.random.default_rng(seed))
     engine.add_emitters([
         FixedFrequencyEmitter(0, band_index=4, pri_sec=5.25e-3, pulse_width=1.05e-3),
@@ -90,12 +96,13 @@ def create_stage3_env(K: int = 35, T: int = 2000, seed: int = 103) -> EWSpectrum
     return EWSpectrumEnv(truth_engine=engine, K=K, T=T, seed=seed)
 
 
-def train_curriculum(total_timesteps: int = 30000) -> RecurrentPPO:
+def train_curriculum(total_timesteps: int = 30000, dynamic: bool = True) -> RecurrentPPO:
     """
     Executes curriculum training across the 3 tactical stages.
     """
+    mode_str = "Dynamic Domain-Randomized" if dynamic else "Static Canonical"
     print("=" * 70)
-    print("  EW Smart Scan — Curriculum Deep Reinforcement Learning Training")
+    print(f"  EW Smart Scan — {mode_str} DRL Curriculum Training")
     print("=" * 70)
 
     steps_per_stage = max(2048, total_timesteps // 3)
@@ -103,7 +110,7 @@ def train_curriculum(total_timesteps: int = 30000) -> RecurrentPPO:
 
     # ── Stage 1 Training ───────────────────────────────────────────────────
     print(f"\n[Stage 1/3] Training on Fixed-Frequency Emitters ({steps_per_stage} steps)...")
-    env_stage1 = create_stage1_env(K=K)
+    env_stage1 = create_stage1_env(K=K, dynamic=dynamic)
     
     model = RecurrentPPO(
         policy="MlpLstmPolicy",
@@ -123,13 +130,13 @@ def train_curriculum(total_timesteps: int = 30000) -> RecurrentPPO:
 
     # ── Stage 2 Training ───────────────────────────────────────────────────
     print(f"\n[Stage 2/3] Training on Frequency-Hopping Emitters ({steps_per_stage} steps)...")
-    env_stage2 = create_stage2_env(K=K)
+    env_stage2 = create_stage2_env(K=K, dynamic=dynamic)
     model.set_env(env_stage2)
     model.learn(total_timesteps=steps_per_stage, callback=cb)
 
     # ── Stage 3 Training ───────────────────────────────────────────────────
     print(f"\n[Stage 3/3] Training on Spatially Scanning + Full Mixed Battlefield ({steps_per_stage} steps)...")
-    env_stage3 = create_stage3_env(K=K)
+    env_stage3 = create_stage3_env(K=K, dynamic=dynamic)
     model.set_env(env_stage3)
     model.learn(total_timesteps=steps_per_stage, callback=cb)
 
@@ -140,18 +147,18 @@ def train_curriculum(total_timesteps: int = 30000) -> RecurrentPPO:
 
     # Also extract PyTorch actor-critic weights for standalone inference
     pt_path = CHECKPOINT_DIR / "drl_scheduler.pt"
-    # Create pure PyTorch scheduler and transfer policy weights where compatible
     standalone_scheduler = DRLScheduler(K=K)
     standalone_scheduler.save(pt_path)
 
     print(f"[Train] Saved Standalone PyTorch Model → {pt_path}")
-    print("\nCurriculum Training Complete! Ready for Phase 3 Benchmark.")
+    print("\nCurriculum Training Complete! Ready for Evaluation.")
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train EW Smart Scan DRL Agent")
     parser.add_argument("--timesteps", type=int, default=15000, help="Total training timesteps across curriculum")
+    parser.add_argument("--static", action="store_true", help="Use legacy static environment instead of dynamic domain randomization")
     args = parser.parse_args()
 
-    train_curriculum(total_timesteps=args.timesteps)
+    train_curriculum(total_timesteps=args.timesteps, dynamic=not args.static)

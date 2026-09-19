@@ -10,7 +10,8 @@ from ew_sim.emitters import (
     make_default_scenario,
 )
 from ew_sim.truth_engine import TruthEngine, build_default_truth_engine
-from ew_sim.env import EWSpectrumEnv
+from ew_sim.env import EWSpectrumEnv, DynamicSpectrumEnv
+from ew_sim.multi_env import MultiReceiverEWSpectrumEnv, DynamicMultiReceiverEnv
 from ew_sim.turing_loader import (
     PulseDescriptorWord,
     TuringDatasetAdapter,
@@ -26,7 +27,11 @@ __all__ = [
     "TruthEngine",
     "build_default_truth_engine",
     "EWSpectrumEnv",
+    "DynamicSpectrumEnv",
+    "MultiReceiverEWSpectrumEnv",
+    "DynamicMultiReceiverEnv",
     "PulseDescriptorWord",
     "TuringDatasetAdapter",
     "SyntheticTuringGenerator",
 ]
+

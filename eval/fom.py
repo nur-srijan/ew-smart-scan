@@ -56,13 +56,16 @@ class EpisodeReport:
     discovery_rate: float
     total_reward: float
     mean_switching_distance: float
+    total_collisions: int = 0
+    collision_rate: float = 0.0
+    num_tuners: int = 1
     emitter_reports: dict[int, EmitterMetrics] = field(default_factory=dict)
     cumulative_discovery_curve: np.ndarray = field(default_factory=lambda: np.zeros(0))
     cumulative_hit_curve: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
     def summary_dict(self) -> dict[str, Any]:
         """Flatten key scalar metrics into a dictionary for tables/CSV."""
-        return {
+        d = {
             "Policy": self.policy_name,
             "Pd": self.empirical_pd,
             "Pfa": self.empirical_pfa,
@@ -73,6 +76,11 @@ class EpisodeReport:
             "Total_Reward": self.total_reward,
             "Avg_Switch_Dist": self.mean_switching_distance,
         }
+        if self.num_tuners > 1:
+            d["Tuners"] = self.num_tuners
+            d["Collision_Rate_%"] = self.collision_rate * 100.0
+        return d
+
 
 
 class FoMEvaluator:
@@ -86,8 +94,8 @@ class FoMEvaluator:
     def evaluate_trajectory(
         self,
         policy_name: str,
-        actions: list[int] | np.ndarray,
-        hits: list[bool] | np.ndarray,
+        actions: list[Any] | np.ndarray,
+        hits: list[Any] | np.ndarray,
         rewards: list[float] | np.ndarray,
     ) -> EpisodeReport:
         """
@@ -97,10 +105,12 @@ class FoMEvaluator:
         ----------
         policy_name : str
             Name of the scheduler evaluated.
-        actions : list[int] or np.ndarray
-            Sub-band index chosen at each step t (length T).
-        hits : list[bool] or np.ndarray
-            Binary hit observation (True/False) received at each step t.
+        actions : list or np.ndarray
+            Sub-band index chosen at each step t (shape (T,) for single receiver,
+            or (T, M) for multi-receiver).
+        hits : list or np.ndarray
+            Binary hit observation(s) received at each step t (shape (T,), (T, M),
+            or list of dicts {band: hit}).
         rewards : list[float] or np.ndarray
             Environment reward received at each step t.
 
@@ -109,10 +119,18 @@ class FoMEvaluator:
         EpisodeReport containing all metrics.
         """
         actions = np.asarray(actions, dtype=int)
-        hits = np.asarray(hits, dtype=bool)
         rewards = np.asarray(rewards, dtype=float)
         T = len(actions)
         assert T == self.truth.T, f"Action trajectory length {T} != TruthEngine length {self.truth.T}"
+
+        is_multi = (actions.ndim == 2)
+        num_tuners = actions.shape[1] if is_multi else 1
+
+        hits_is_dict_list = isinstance(hits, (list, tuple)) and len(hits) > 0 and isinstance(hits[0], dict)
+        if not hits_is_dict_list:
+            hits_arr = np.asarray(hits)
+        else:
+            hits_arr = None
 
         # Track per-emitter intercepts
         emitter_first_hit: dict[int, Optional[int]] = {e.id: None for e in self.truth._emitters}
@@ -122,6 +140,8 @@ class FoMEvaluator:
         active_dwell_hits = 0
         quiet_dwell_count = 0
         false_alarm_count = 0
+        total_collisions = 0
+        total_dwell_count = 0
 
         cumulative_discovery = np.zeros(T, dtype=int)
         cumulative_hits = np.zeros(T, dtype=int)
@@ -129,26 +149,62 @@ class FoMEvaluator:
 
         # Step-by-step analysis
         for t in range(T):
-            band = actions[t]
-            observed_hit = hits[t]
-            is_truly_active = self.truth.is_active(band, t)
+            if is_multi:
+                tuner_bands = actions[t]
+                unique_bands, counts = np.unique(tuner_bands, return_counts=True)
+                collisions_t = int(np.sum(counts - 1))
+                total_collisions += collisions_t
+                total_dwell_count += len(unique_bands)
 
-            if is_truly_active:
-                active_dwell_count += 1
-                if observed_hit:
-                    active_dwell_hits += 1
-                    # Identify which emitter(s) were transmitting in this band
-                    for emitter in self.truth._emitters:
-                        e_band, e_active = emitter.state_at(t * self.truth.T_slot)
-                        if e_band == band and e_active:
-                            emitter_intercept_counts[emitter.id] += 1
-                            if emitter_first_hit[emitter.id] is None:
-                                emitter_first_hit[emitter.id] = t
-                            discovered_set.add(emitter.id)
+                if hits_is_dict_list:
+                    step_hit_map = hits[t]
+                elif hits_arr is not None and hits_arr.ndim == 2:
+                    step_hit_map = {tuner_bands[m]: bool(hits_arr[t, m]) for m in range(num_tuners)}
+                elif hits_arr is not None and hits_arr.ndim == 1:
+                    step_hit_map = {b: bool(hits_arr[t]) for b in unique_bands}
+                else:
+                    step_hit_map = {tuner_bands[m]: bool(hits[t][m]) for m in range(min(num_tuners, len(hits[t])))}
+
+                for band in unique_bands:
+                    is_truly_active = self.truth.is_active(band, t)
+                    observed_hit = step_hit_map.get(band, False)
+
+                    if is_truly_active:
+                        active_dwell_count += 1
+                        if observed_hit:
+                            active_dwell_hits += 1
+                            for emitter in self.truth._emitters:
+                                e_band, e_active = emitter.state_at(t * self.truth.T_slot)
+                                if e_band == band and e_active:
+                                    emitter_intercept_counts[emitter.id] += 1
+                                    if emitter_first_hit[emitter.id] is None:
+                                        emitter_first_hit[emitter.id] = t
+                                    discovered_set.add(emitter.id)
+                    else:
+                        quiet_dwell_count += 1
+                        if observed_hit:
+                            false_alarm_count += 1
             else:
-                quiet_dwell_count += 1
-                if observed_hit:
-                    false_alarm_count += 1
+                total_dwell_count += 1
+                band = int(actions[t])
+                observed_hit = bool(hits_arr[t]) if hits_arr is not None else bool(hits[t])
+                is_truly_active = self.truth.is_active(band, t)
+
+                if is_truly_active:
+                    active_dwell_count += 1
+                    if observed_hit:
+                        active_dwell_hits += 1
+                        for emitter in self.truth._emitters:
+                            e_band, e_active = emitter.state_at(t * self.truth.T_slot)
+                            if e_band == band and e_active:
+                                emitter_intercept_counts[emitter.id] += 1
+                                if emitter_first_hit[emitter.id] is None:
+                                    emitter_first_hit[emitter.id] = t
+                                discovered_set.add(emitter.id)
+                else:
+                    quiet_dwell_count += 1
+                    if observed_hit:
+                        false_alarm_count += 1
 
             cumulative_discovery[t] = len(discovered_set)
             cumulative_hits[t] = active_dwell_hits
@@ -180,7 +236,7 @@ class FoMEvaluator:
                 tti_sec = max(0.0, tti_sec)
                 discovered = True
             else:
-                tti_sec = max_episode_time  # Penalize undiscovered with max episode horizon
+                tti_sec = max_episode_time
                 discovered = False
 
             ttis_sec.append(tti_sec)
@@ -207,14 +263,20 @@ class FoMEvaluator:
         max_tti = float(np.max(ttis_sec)) if ttis_sec else 0.0
 
         # Switching distance overhead
-        switch_diffs = np.abs(np.diff(actions))
-        mean_switch = float(np.mean(switch_diffs)) if len(switch_diffs) > 0 else 0.0
+        if is_multi:
+            switch_diffs = np.abs(np.diff(actions, axis=0))
+            mean_switch = float(np.mean(switch_diffs)) if len(switch_diffs) > 0 else 0.0
+        else:
+            switch_diffs = np.abs(np.diff(actions))
+            mean_switch = float(np.mean(switch_diffs)) if len(switch_diffs) > 0 else 0.0
+
+        collision_rate = (total_collisions / (T * num_tuners)) if (is_multi and T > 0) else 0.0
 
         return EpisodeReport(
             policy_name=policy_name,
             total_slots=T,
             T_slot_sec=self.truth.T_slot,
-            total_dwells=T,
+            total_dwells=total_dwell_count,
             total_hits=active_dwell_hits,
             false_alarms=false_alarm_count,
             empirical_pd=empirical_pd,
@@ -227,7 +289,11 @@ class FoMEvaluator:
             discovery_rate=len(discovered_set) / max(1, len(self.truth._emitters)),
             total_reward=float(np.sum(rewards)),
             mean_switching_distance=mean_switch,
+            total_collisions=total_collisions,
+            collision_rate=collision_rate,
+            num_tuners=num_tuners,
             emitter_reports=emitter_reports,
             cumulative_discovery_curve=cumulative_discovery,
             cumulative_hit_curve=cumulative_hits,
         )
+

@@ -15,6 +15,17 @@ from schedulers.predictor import (
     HybridPredictiveScheduler,
 )
 from schedulers.drl_agent import DRLScheduler
+from schedulers.multi_schedulers import (
+    BaseMultiScheduler,
+    MultiSequentialSweep,
+    MultiPseudoRandomSweep,
+    MultiWhittleIndexScheduler,
+    CooperativeRoleScheduler,
+)
+from schedulers.multi_drl import (
+    MultiRecurrentActorCriticNet,
+    MultiDRLScheduler,
+)
 
 __all__ = [
     "BaseScheduler",
@@ -26,4 +37,11 @@ __all__ = [
     "OnlinePeriodicityEstimator",
     "HybridPredictiveScheduler",
     "DRLScheduler",
+    "BaseMultiScheduler",
+    "MultiSequentialSweep",
+    "MultiPseudoRandomSweep",
+    "MultiWhittleIndexScheduler",
+    "CooperativeRoleScheduler",
+    "MultiRecurrentActorCriticNet",
+    "MultiDRLScheduler",
 ]

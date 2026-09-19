@@ -1,0 +1,19 @@
+{
+  "stage1": {
+    "steps": 1000000,
+    "time_sec": 1576.2715349197388
+  },
+  "stage2": {
+    "steps": 1500000,
+    "time_sec": 2355.6248030662537
+  },
+  "stage3": {
+    "steps": 1500000,
+    "time_sec": 2337.526010990143
+  },
+  "total_time_sec": 6402.332848548889,
+  "total_steps": 4000000,
+  "device": "cuda",
+  "num_envs": 16,
+  "gpu": "Tesla T4"
+}
