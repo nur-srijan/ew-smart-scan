@@ -1169,6 +1169,57 @@ class LiveSimulationSession:
             f"Environment ready: K={self.K} sub-bands (0.5-18 GHz), M={self.M} parallel tuners",
         ]
 
+        # Warm-up pre-simulation to establish stable tracks & realistic metrics
+        for _ in range(50):
+            self._warmup_step()
+
+    def _warmup_step(self) -> None:
+        """Internal step during initialization to avoid cold-start zero-intercept bias."""
+        if hasattr(self.scheduler, "select_bands"):
+            actions = self.scheduler.select_bands(self.obs)
+        elif hasattr(self.scheduler, "select_actions"):
+            actions = self.scheduler.select_actions(self.obs)
+        else:
+            base_act = self.scheduler.select_band(self.obs) if hasattr(self.scheduler, "select_band") else int(self.scheduler.select_action(self.obs))
+            actions = np.array([base_act, (base_act + 8) % self.K, (base_act + 17) % self.K, (base_act + 26) % self.K], dtype=np.int64)
+
+        next_obs, rewards, terminated, truncated, info = self.env.step(actions)
+
+        if hasattr(self.scheduler, "update_feedback"):
+            acts_taken = [int(actions[m]) for m in range(self.M)]
+            feedbacks = [bool(self.env._last_band_hits.get(int(actions[m]), False)) for m in range(self.M)]
+            try:
+                self.scheduler.update_feedback(acts_taken, feedbacks)
+            except Exception:
+                pass
+
+        tuner_hits = [bool(self.env._last_band_hits.get(int(actions[m]), False)) for m in range(self.M)]
+        self.total_rx_pulses += sum(tuner_hits)
+
+        seq_bands = [(self.seq_step * self.M + m) % self.K for m in range(self.M)]
+        for b in seq_bands:
+            if self.truth.S[b, self.step_idx] > 0:
+                self.seq_rx_pulses += 1
+        self.seq_step += 1
+
+        t_now_sec = self.step_idx * self.truth.T_slot
+        for m in range(self.M):
+            b_m = int(actions[m])
+            if tuner_hits[m]:
+                em_match = None
+                for em in self.truth._emitters:
+                    b_em, is_tx = em.state_at(t_now_sec)
+                    if is_tx and b_em == b_m:
+                        em_match = em
+                        break
+                em_id = em_match.id if em_match is not None else 0
+                self.emitter_toa_hits[em_id].append(t_now_sec)
+                if em_id not in self.first_intercepts:
+                    self.first_intercepts[em_id] = t_now_sec
+
+        self.obs = next_obs
+        self.step_idx += 1
+
     def step(self) -> dict[str, Any]:
         if self.step_idx >= 4950:
             self.reset()
@@ -1199,7 +1250,7 @@ class LiveSimulationSession:
         self.total_rx_pulses += sum(tuner_hits)
 
         # Baseline sequential reference for comparative gain
-        seq_bands = [(self.seq_step + m * (self.K // self.M)) % self.K for m in range(self.M)]
+        seq_bands = [(self.seq_step * self.M + m) % self.K for m in range(self.M)]
         for b in seq_bands:
             if self.truth.S[b, self.step_idx] > 0:
                 self.seq_rx_pulses += 1

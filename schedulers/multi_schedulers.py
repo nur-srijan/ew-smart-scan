@@ -378,6 +378,8 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
         self.toa_history: dict[int, list[int]] = {k: [] for k in range(K)}
         self.pri_estimates: dict[int, float] = {}
         self.last_hit_slot: dict[int, int] = {}
+        self.fixed_tracks: set[int] = set()
+        self.fhss_tracks: set[int] = set()
         self.transition_counts = np.zeros((K, K), dtype=np.float32)
         self.last_active_bands: list[int] = []
 
@@ -388,6 +390,8 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
         self.toa_history = {k: [] for k in range(self.K)}
         self.pri_estimates = {}
         self.last_hit_slot = {}
+        self.fixed_tracks = set()
+        self.fhss_tracks = set()
         self.transition_counts = np.zeros((self.K, self.K), dtype=np.float32)
         self.last_active_bands = []
 
@@ -396,28 +400,47 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
         assigned: list[int] = []
 
         # ── Role 0: Phase-Locked Pulse Tracker (Fixed / Periodic Emitters) ──
-        # Check if any band with an estimated PRI has a pulse predicted at slot self.t
-        tracker_candidates: list[tuple[int, float]] = []
-        for k, pri in self.pri_estimates.items():
-            if k in available_bands and pri is not None and pri >= 2.0:
-                last_t = self.last_hit_slot.get(k, -999)
-                slots_since = self.t - last_t
-                # Phase offset mod PRI
-                phase = slots_since % round(pri)
-                if phase == 0 or phase == round(pri) - 1:
-                    # High confidence pulse imminent
-                    confidence = float(self.belief[k]) * (10.0 if phase == 0 else 5.0)
-                    tracker_candidates.append((k, confidence))
+        best_t0 = None
+        best_t0_score = -1.0
 
-        tracker_candidates.sort(key=lambda x: x[1], reverse=True)
-        if tracker_candidates:
-            best_track = tracker_candidates[0][0]
-            assigned.append(best_track)
-            available_bands.remove(best_track)
+        for k in self.fixed_tracks:
+            if k in available_bands:
+                pri = self.pri_estimates.get(k, 5.0)
+                last_t = self.last_hit_slot.get(k, self.t)
+                phase = (self.t - last_t) % max(1, round(pri))
+                score = 12.0 if phase in (0, round(pri) - 1, 1) else 4.0
+                if score > best_t0_score:
+                    best_t0_score = score
+                    best_t0 = k
+
+        if best_t0 is None:
+            for k in available_bands:
+                pri = self.pri_estimates.get(k)
+                if pri is not None and pri >= 2.0:
+                    last_t = self.last_hit_slot.get(k, self.t)
+                    phase = (self.t - last_t) % max(1, round(pri))
+                    score = 10.0 if phase in (0, round(pri) - 1, 1) else 3.0
+                    if score > best_t0_score:
+                        best_t0_score = score
+                        best_t0 = k
+
+        if best_t0 is None:
+            # Pick band with highest sustained belief not yet marked as hopping
+            for k in available_bands:
+                if self.belief[k] > 0.35 and k not in self.fhss_tracks:
+                    score = float(self.belief[k]) * 5.0
+                    if score > best_t0_score:
+                        best_t0_score = score
+                        best_t0 = k
+
+        if best_t0 is not None:
+            assigned.append(best_t0)
+            available_bands.remove(best_t0)
 
         # ── Role 1 & 2: Agile FHSS Hop Chasers (Markov Transition Bracketing) ──
-        # If we saw active hops in recent steps, predict next hop destination
         fhss_candidates: list[tuple[int, float]] = []
+
+        # 1. Markov transition destinations from recently active bands
         if self.last_active_bands:
             for prev_b in self.last_active_bands:
                 row = self.transition_counts[prev_b]
@@ -426,11 +449,13 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
                     probs = row / row_sum
                     for dest_k in range(self.K):
                         if dest_k in available_bands and probs[dest_k] > 0.05:
-                            fhss_candidates.append((dest_k, float(probs[dest_k]) * 8.0))
+                            fhss_candidates.append((dest_k, float(probs[dest_k]) * 10.0))
 
-        # Also consider currently hot/high-belief bands as agile candidates
+        # 2. Known FHSS member bands and hot channels
         for k in available_bands:
-            if self.belief[k] > 0.35:
+            if k in self.fhss_tracks:
+                fhss_candidates.append((k, float(self.belief[k]) * 8.0 + 3.0))
+            elif self.belief[k] > 0.25:
                 fhss_candidates.append((k, float(self.belief[k]) * 6.0))
 
         fhss_candidates.sort(key=lambda x: x[1], reverse=True)
@@ -440,8 +465,12 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
                 available_bands.remove(cand_band)
 
         # ── Role 3: Age-of-Information Surveillance Sentry ──────────────────
-        # Remaining tuners patrol max-AoI bands to detect new or scanning radars
-        aoi_ranked = sorted(list(available_bands), key=lambda k: self.aoi[k], reverse=True)
+        # Patrol max-AoI bands with anti-resonance micro-dither to catch rotating radars
+        aoi_ranked = sorted(
+            list(available_bands),
+            key=lambda k: float(self.aoi[k]) + float(self.rng.uniform(0.0, 0.4)),
+            reverse=True,
+        )
         for cand_band in aoi_ranked:
             if len(assigned) < self.M:
                 assigned.append(cand_band)
@@ -449,12 +478,12 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
             else:
                 break
 
-        # Fallback if any tuner remains unassigned (e.g. at step 0)
-        if len(assigned) < self.M:
-            comb_offset = self.t * self.M
-            for m in range(self.M):
-                b = (comb_offset + m) % self.K
-                if len(assigned) < self.M and b in available_bands:
+        # Anti-resonance harmonic dither fallback if any tuner remains unassigned
+        dither_base = (self.t * 7 + (self.t % 3) * 11)
+        for m in range(self.M):
+            if len(assigned) < self.M:
+                b = (dither_base + m * 5) % self.K
+                if b in available_bands:
                     assigned.append(b)
                     available_bands.remove(b)
 
@@ -487,29 +516,39 @@ class CooperativeRoleScheduler(BaseMultiScheduler):
             hit = band_hit_map.get(k, False)
             if hit:
                 current_active_bands.append(k)
-                self.belief[k] = min(0.99, self.belief[k] * 1.5 + 0.3)
+                self.belief[k] = min(0.98, self.belief[k] * 1.3 + 0.35)
                 self.toa_history[k].append(self.t - 1)
                 self.last_hit_slot[k] = self.t - 1
 
-                # Update PRI estimate if >= 3 pulses observed
+                # Update PRI estimate if >= 2 pulses observed
                 hist = self.toa_history[k]
-                if len(hist) >= 3:
+                if len(hist) >= 2:
                     deltas = np.diff(hist[-6:])
-                    if len(deltas) >= 2:
+                    deltas = deltas[deltas >= 2]
+                    if len(deltas) >= 1:
                         med = float(np.median(deltas))
                         if med >= 2.0:
                             self.pri_estimates[k] = med
+                            # Classify periodic fixed tracks
+                            if len(deltas) >= 2 and np.std(deltas) < 1.2:
+                                self.fixed_tracks.add(k)
 
-                # Update Markov transition from previous step's active bands
-                for prev_b in self.last_active_bands:
-                    if prev_b != k:
-                        self.transition_counts[prev_b, k] += 1.0
+                # Update Markov transition from previous active bands
+                if self.last_active_bands:
+                    for prev_b in self.last_active_bands:
+                        if prev_b != k:
+                            self.transition_counts[prev_b, k] += 1.0
+                            self.fhss_tracks.add(prev_b)
+                            self.fhss_tracks.add(k)
             else:
-                self.belief[k] *= 0.65
+                # Gentle decay on miss (radar duty cycle is 10-20%)
+                self.belief[k] = max(0.05, self.belief[k] * 0.90)
 
-        self.last_active_bands = current_active_bands
+        if current_active_bands:
+            self.last_active_bands = current_active_bands
 
         # 2. Update Age of Information
         self.aoi += 1.0
         self.aoi[unique_actions] = 0.0
+
 

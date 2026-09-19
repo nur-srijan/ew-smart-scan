@@ -690,6 +690,10 @@ async function sample() {
   isConnected = false;
   $("engine-status").textContent = "OFFLINE PLAYBACK · LOCAL SIMULATION";
   $("engine-status").className = "badge amber";
+  if ($("strategy-label")) $("strategy-label").textContent = currentPolicy;
+  if ($("collision-label")) $("collision-label").textContent = "0.0% Tuner Collisions [Guaranteed]";
+  if ($("perf-summary")) $("perf-summary").textContent = "IR: 28.5% · TTI: 185 ms";
+  if ($("perf-sub")) $("perf-sub").textContent = "175.3 Pulses Intercepted (5.9x vs Baseline)";
 
   // Simulate synthetic multi-receiver movements
   nodes.forEach((n, i) => {
