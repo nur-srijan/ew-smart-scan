@@ -37,10 +37,7 @@ htmlcov/
 .nox/
 
 # Machine Learning Checkpoints & Large Data Files
-checkpoints/*.pt
-checkpoints/*.pth
-checkpoints/*.onnx
-checkpoints/*.zip
+
 *.h5
 *.hdf5
 *.npz
