@@ -70,6 +70,8 @@ kaggle.json
 .ipynb_checkpoints/
 .claude/
 voiceover/
+*.pptx
+jetson-bsp-skills/
 
 # macOS / OS Files
 .DS_Store

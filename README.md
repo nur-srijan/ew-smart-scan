@@ -3,7 +3,6 @@
 
 [![Tests](https://img.shields.io/badge/Tests-279%2F279%20Passing-brightgreen.svg)](#test-suite--validation)
 [![Engine](https://img.shields.io/badge/C%2B%2B20%20Core-20.8%20ns%20Latency-blue.svg)](#ultra-fast-c20-scheduling-core)
-[![Collisions](https://img.shields.io/badge/Tuner%20Collisions-0.0%25%20Guaranteed-teal.svg)](#fleet-cooperative-architecture)
 [![Python](https://img.shields.io/badge/Python-3.12%20|%20uv-yellow.svg)](#quickstart-guide)
 
 An autonomous, multi-agent Electronic Support (ES) surveillance platform powered by **Restless Multi-Armed Bandits (RMAB)**, **Recurrent Deep Reinforcement Learning (DRL)**, and a **zero-allocation C++20 real-time engine**. Designed for DRDO Problem Statement 26055, Smart Scan intercepts, deinterleaves, and tracks frequency-agile and scanning emitters across 0.5–18 GHz from binary hit/miss feedback alone — **zero prior intelligence required**.
@@ -53,12 +52,8 @@ Evaluated across dynamic scenarios featuring fixed-frequency air defense radars 
 | **Global Interception Ratio (IR)** | 2.65% | 3.78% | 18.42% | **22.17%** | **+737% (8.4x Higher)** |
 | **Mean Time-to-Intercept (TTI)** | 1.743 s | 1.412 s | 0.285 s | **0.237 s** | **61% Latency Reduction** |
 | **Pulse Throughput (pulses/step)** | 29.8 | 42.5 | 145.8 | **175.3** | **5.9x Increase** |
-| **Tuner Collision Rate** | 0.0% (N/A) | 0.0% | 0.0% | **0.0%** | **Strict Orthogonality** |
-| **Anti-Camping Entropy** | High (random) | Maximum (blind) | Balanced | **Optimal (0.88)** | **Exploit + AoI Explore** |
 | **Decision Latency** | < 0.1 µs | < 0.1 µs | 20.8 ns | **20.8 ns (C++20)** | **Well inside 50 µs** |
-
-> [!TIP]
-> **Alan Turing Institute Synthetic Radar Dataset Benchmark:** Evaluated on standardized high-density radar PDW streams (Hugging Face schema), Smart Scan EW achieves a **peak Interception Ratio of 47.23%** (128.3 captured pulses/episode)—outperforming classical sequential sweeps (3.25% IR) by **14.5×** with **0.0% tuner collisions** and sub-100 ms threat time-to-intercept.
+> **Alan Turing Institute Synthetic Radar Dataset Benchmark:** Smart Scan EW achieves a **peak Interception Ratio of 47.23%** (128.3 captured pulses/episode)—outperforming classical sequential sweeps (3.25% IR) by **14.5×** with **0.0% tuner collisions** and sub-100 ms threat time-to-intercept.
 
 ---
 
