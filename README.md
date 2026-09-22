@@ -102,9 +102,7 @@ Evaluated across dynamic scenarios featuring fixed-frequency air defense radars 
 └─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 🚀 Ultra-Fast C++20 Scheduling Core
+### 🚀 Ultra-Fast C++20 Scheduling Core
 
 The decision engine is implemented in ISO C++20 (`src/rmab_engine.cpp`) with zero dynamic memory allocations in the critical path:
 
@@ -135,7 +133,7 @@ Every observation cycle operates under a strict **50 µs receiver dwell window**
 ```
 0 µs                        25 µs                 40 µs              49.98 µs    50 µs
 ├─────────────────────────────┼─────────────────────┼───────────────────┼──────────┤
-│    RF Synthesizer Settling   │  ADC Baseband Sample│ C++20 RMAB Engine │ Guard /  │
+│   RF Synthesizer Settling   │  ADC Baseband Sample│ C++20 RMAB Engine │ Guard /  │
 │      & LO Phase Lock        │  & CA-CFAR Detect   │ Decision Cycle    │ Pipeline │
 │        (25 – 30 µs)         │     (15 – 18 µs)    │    (20.80 ns)     │ (>2 µs)  │
 └─────────────────────────────┴─────────────────────┴───────────────────┴──────────┘
@@ -166,115 +164,41 @@ Launch the integrated tactical dashboard serving real-time EW telemetry at `http
 
 ---
 
-## 📁 Repository Layout
-
-```
-ew-smart-scan/
-├── src/                         # C++20 High-Performance Core
-│   ├── rmab_engine.cpp          # Zero-allocation Whittle Index engine
-│   └── bindings.cpp             # Pybind11 module bindings (ew_smart_scan_cpp)
-│
-├── hardware/                    # Edge Hardware Benchmarking & Harness
-│   ├── test_timing.cpp          # Nanosecond-resolution hard real-time test harness
-│   ├── test_timing              # Compiled executable (20.8 ns decision cycle)
-│   └── run_timing_bench.sh      # Benchmark automation script
-│
-├── ew_sim/                      # Spectrum Environment & Physics Simulation
-│   ├── env.py                   # Single-receiver Gymnasium EWSpectrumEnv
-│   ├── multi_receiver_env.py    # Multi-Receiver EWSpectrumEnv (M tuners, K sub-bands)
-│   ├── emitters.py              # Fixed-Frequency, FHSS, Scanning, and Strobe emitters
-│   ├── truth_engine.py          # 2D S[K, T] Ground Truth matrix generator
-│   └── turing_loader.py         # Synthetic Radar Dataset adapter (PDW schema)
-│
-├── schedulers/                  # Autonomous Scheduling Algorithms
-│   ├── multi_cooperative.py     # Fleet Cooperative Role Scheduler (0.0% collisions)
-│   ├── rmab.py                  # Python Whittle Index Restless Bandit
-│   ├── cpp_rmab_adapter.py      # Python wrapper calling native C++20 engine
-│   ├── predictor.py             # Online Periodicity & Scan Phase Estimator
-│   ├── drl_agent.py             # Recurrent PPO / Actor-Critic PyTorch policy
-│   └── baselines.py             # Sequential, Pseudo-Random, and Priority sweeps
-│
-├── eval/                        # Evaluation & Figures of Merit (FoM)
-│   ├── fom.py                   # FoM calculators (IR, TTI, Pd, Pfa, Collisions, AoI)
-│   └── runner.py                # Monte Carlo evaluation harness
-│
-├── demo/                        # Tactical Operations Center & Dashboards
-│   ├── dashboard.py             # Unified Flask/Dash server serving C2-ESM & API
-│   ├── web/                     # C2-ESM Tactical TOC Frontend
-│   │   ├── index.html           # 5-tab dark military tactical command interface
-│   │   └── app.js               # Dynamic REST client, live canvas & Plotly engine
-│   ├── compare.py               # Policy comparison waterfall visualizer
-│   └── run_phase3_benchmark.py  # Automated Monte Carlo benchmark runner
-│
-├── tests/                       # 279-Test Comprehensive Test Suite
-│   ├── e2e/                     # 4-Tier End-to-End Enterprise Test Suite
-│   │   ├── test_tier1_features.py   # Core functional feature tests
-│   │   ├── test_tier2_boundaries.py # Edge-case & parameter boundary tests
-│   │   ├── test_tier3_pairwise.py   # Cross-component interaction tests
-│   │   └── test_tier4_scenarios.py  # End-to-end tactical mission scenarios
-│   ├── test_multi_cooperative.py    # Fleet scheduler & collision-avoidance tests
-│   ├── test_multi_receiver.py       # Multi-receiver gym compliance tests
-│   ├── test_rmab.py                 # Whittle index mathematical correctness tests
-│   ├── test_emitters.py             # Radar physics & PRI timing tests
-│   └── test_demo.py                 # REST API & dashboard integration tests
-│
-├── demo_video_transcript.md     # 3-Minute Hackathon Demo Video Script with visual cues
-├── pyproject.toml               # uv project configuration & dependencies
-└── CMakeLists.txt               # CMake configuration for C++20 build
-```
-
----
-
 ## ⚡ Quickstart Guide
 
 ### 1. System Requirements & Toolchain
 
 To run the simulation, web dashboard, and compile the ultra-fast C++20 scheduling core, verify you have the following prerequisites installed:
 
-| Component | Minimum Version | Notes |
-|:---|:---|:---|
-| **Python** | 3.10+ (3.12 Recommended) | Managed via [`uv`](https://docs.astral.sh/uv/) or standard `pip` |
-| **CMake** | >= 3.20 | Required for compiling C++20 engine & pybind11 modules |
-| **C++ Compiler** | C++20 Compliant | GCC 11+, Clang 14+, Apple Clang 14+, or MSVC 2022 |
-
-#### Platform-Specific Setup
-
-<details open>
-<summary><b>🍎 macOS (Apple Silicon / Intel)</b></summary>
-
-```bash
-# 1. Install Xcode Command Line Tools (provides Clang C++20 compiler)
-xcode-select --install
-
-# 2. Install CMake and uv package manager via Homebrew
-brew install cmake uv
-```
-</details>
-
+- **Python** (3.10+): Managed via [`uv`](https://docs.astral.sh/uv/) or standard `pip`
 <details>
-<summary><b>🐧 Linux (Ubuntu / Debian / CentOS / RHEL)</b></summary>
+<summary>Install `uv`</summary>
 
 ```bash
-# 1. Install build essentials, C++20 compiler (g++), and CMake
-sudo apt update && sudo apt install -y build-essential cmake g++ curl
-
-# 2. Install uv package manager
+# Linux or macOS
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-</details>
 
-<details>
-<summary><b>🪟 Windows (PowerShell / Command Prompt)</b></summary>
-
-```powershell
-# 1. Install CMake and uv via Windows Package Manager
-winget install Kitware.CMake
+# Windows
 winget install astral-sh.uv
-
-# 2. Ensure Visual Studio 2022 Build Tools (with "Desktop development with C++") is installed
-# https://visualstudio.microsoft.com/visual-cpp-build-tools/
 ```
+
 </details>
+
+- **CMake** (>= 3.20): Required for compiling C++20 engine & pybind11 modules
+<details>
+<summary>Install CMake</summary>
+
+```bash
+# Linux or macOS
+brew install cmake
+
+# Windows
+winget install Kitware.CMake
+```
+
+</details>
+
+- **C++ Compiler** (C++20 Compliant): GCC 11+, Clang 14+, Apple Clang 14+, or MSVC 2022
 
 ---
 
@@ -338,6 +262,65 @@ uv run pytest --tb=short -q
 uv run python demo/run_phase3_benchmark.py
 ```
 *Generates full statistical evaluation curves and Figures of Merit.*
+
+---
+
+## 📁 Repository Layout
+
+```
+ew-smart-scan/
+├── src/                         # C++20 High-Performance Core
+│   ├── rmab_engine.cpp          # Zero-allocation Whittle Index engine
+│   └── bindings.cpp             # Pybind11 module bindings (ew_smart_scan_cpp)
+│
+├── hardware/                    # Edge Hardware Benchmarking & Harness
+│   ├── test_timing.cpp          # Nanosecond-resolution hard real-time test harness
+│   ├── test_timing              # Compiled executable (20.8 ns decision cycle)
+│   └── run_timing_bench.sh      # Benchmark automation script
+│
+├── ew_sim/                      # Spectrum Environment & Physics Simulation
+│   ├── env.py                   # Single-receiver Gymnasium EWSpectrumEnv
+│   ├── multi_receiver_env.py    # Multi-Receiver EWSpectrumEnv (M tuners, K sub-bands)
+│   ├── emitters.py              # Fixed-Frequency, FHSS, Scanning, and Strobe emitters
+│   ├── truth_engine.py          # 2D S[K, T] Ground Truth matrix generator
+│   └── turing_loader.py         # Synthetic Radar Dataset adapter (PDW schema)
+│
+├── schedulers/                  # Autonomous Scheduling Algorithms
+│   ├── multi_cooperative.py     # Fleet Cooperative Role Scheduler (0.0% collisions)
+│   ├── rmab.py                  # Python Whittle Index Restless Bandit
+│   ├── cpp_rmab_adapter.py      # Python wrapper calling native C++20 engine
+│   ├── predictor.py             # Online Periodicity & Scan Phase Estimator
+│   ├── drl_agent.py             # Recurrent PPO / Actor-Critic PyTorch policy
+│   └── baselines.py             # Sequential, Pseudo-Random, and Priority sweeps
+│
+├── eval/                        # Evaluation & Figures of Merit (FoM)
+│   ├── fom.py                   # FoM calculators (IR, TTI, Pd, Pfa, Collisions, AoI)
+│   └── runner.py                # Monte Carlo evaluation harness
+│
+├── demo/                        # Tactical Operations Center & Dashboards
+│   ├── dashboard.py             # Unified Flask/Dash server serving C2-ESM & API
+│   ├── web/                     # C2-ESM Tactical TOC Frontend
+│   │   ├── index.html           # 5-tab dark military tactical command interface
+│   │   └── app.js               # Dynamic REST client, live canvas & Plotly engine
+│   ├── compare.py               # Policy comparison waterfall visualizer
+│   └── run_phase3_benchmark.py  # Automated Monte Carlo benchmark runner
+│
+├── tests/                       # 279-Test Comprehensive Test Suite
+│   ├── e2e/                     # 4-Tier End-to-End Enterprise Test Suite
+│   │   ├── test_tier1_features.py   # Core functional feature tests
+│   │   ├── test_tier2_boundaries.py # Edge-case & parameter boundary tests
+│   │   ├── test_tier3_pairwise.py   # Cross-component interaction tests
+│   │   └── test_tier4_scenarios.py  # End-to-end tactical mission scenarios
+│   ├── test_multi_cooperative.py    # Fleet scheduler & collision-avoidance tests
+│   ├── test_multi_receiver.py       # Multi-receiver gym compliance tests
+│   ├── test_rmab.py                 # Whittle index mathematical correctness tests
+│   ├── test_emitters.py             # Radar physics & PRI timing tests
+│   └── test_demo.py                 # REST API & dashboard integration tests
+│
+├── demo_video_transcript.md     # 3-Minute Hackathon Demo Video Script with visual cues
+├── pyproject.toml               # uv project configuration & dependencies
+└── CMakeLists.txt               # CMake configuration for C++20 build
+```
 
 ---
 
