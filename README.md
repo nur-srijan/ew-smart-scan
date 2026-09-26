@@ -153,8 +153,6 @@ winget install Kitware.CMake
 
 - **C++ Compiler** (C++20 Compliant): GCC 11+, Clang 14+, Apple Clang 14+, or MSVC 2022
 
----
-
 ### 2. Environment Setup & Dependency Installation
 
 Clone the repository and synchronize all dependencies (core simulation, reinforcement learning, tactical dashboard, and hardware edge modules):
@@ -175,8 +173,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
----
-
 ### 3. Launch the C2-ESM Tactical Dashboard
 
 Start the integrated tactical operations center server:
@@ -186,8 +182,6 @@ uv run python demo/dashboard.py
 ```
 Open **`http://127.0.0.1:8050`** in your browser to access the live command center.
 
----
-
 ### 4. Run Hard Real-Time C++ Timing Benchmark
 
 ```bash
@@ -196,16 +190,12 @@ Open **`http://127.0.0.1:8050`** in your browser to access the live command cent
 ```
 *Validates 20.8 ns decision cycle and 0 deadline misses inside 50 µs window.*
 
----
-
 ### 5. Run Full Test Suite (Zero Regression Guarantee)
 
 ```bash
 uv run pytest --tb=short -q
 ```
 *Executes all 279 tests across the 4-tier E2E framework and core unit modules.*
-
----
 
 ### 6. Run Monte Carlo Benchmark Suite
 
