@@ -173,8 +173,8 @@ To run the simulation, web dashboard, and compile the ultra-fast C++20 schedulin
 # Linux or macOS
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Windows
-winget install astral-sh.uv
+# Windows (PowerShell v5+ recommended)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 </details>
@@ -184,8 +184,12 @@ winget install astral-sh.uv
 <summary>Install CMake</summary>
 
 ```bash
-# Linux or macOS
+# macOS
 brew install cmake
+
+# Linux
+# Use the package manager provided by your distribution
+# (e.g. apt, dnf, pacman)
 
 # Windows
 winget install Kitware.CMake
@@ -202,8 +206,6 @@ winget install Kitware.CMake
 Clone the repository and synchronize all dependencies (core simulation, reinforcement learning, tactical dashboard, and hardware edge modules):
 
 ```bash
-cd sih-project
-
 # Install dependencies using uv (fastest & recommended)
 uv sync --extra rl --extra dashboard --extra edge
 
