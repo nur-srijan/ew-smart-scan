@@ -158,6 +158,10 @@ winget install Kitware.CMake
 Clone the repository and synchronize all dependencies (core simulation, reinforcement learning, tactical dashboard, and hardware edge modules):
 
 ```bash
+# Clone the repository
+git clone https://github.com/nursrijan/ew-smart-scan.git
+cd ew-smart-scan
+
 # Install dependencies using uv (fastest & recommended)
 uv sync --extra rl --extra dashboard --extra edge
 
