@@ -113,52 +113,6 @@ The decision engine is implemented in ISO C++20 (`src/rmab_engine.cpp`) with zer
 
 ---
 
-## 🛠️ Edge Hardware Implementation & Deployment Plan
-
-Smart Scan EW is architected for direct tactical deployment on low-SWaP (Size, Weight, and Power) airborne and drone Electronic Support payloads:
-
-### 1. Target Embedded Compute & RF Front-End Architecture
-- **Embedded Compute Unit:** **NVIDIA Jetson Orin Nano / Orin NX** (6-core ARM Cortex-A78AE CPU @ 1.5 GHz, 1024-core Ampere GPU with Tensor Cores, 20–40W operational envelope) or low-SWaP defense single-board computers (SBCs).
-- **RF Transceiver / Front-End:** Wideband heterodyne receiver front-end (AD9361 / ADRV9009 or DRDO-indigenous EW digitizer) covering 0.5–18 GHz via stepped local oscillator (LO) downconversion into 35 selectable 500 MHz instantaneous bandwidth (IBW) sub-bands.
-- **High-Throughput Bus:** Direct PCIe Gen4 / Gigabit Ethernet streaming digitized I/Q samples and hardware-generated Pulse Descriptor Words (PDWs) straight into host memory via DMA.
-
-### 2. Hard Real-Time 50 µs Dwell Budget Allocation
-Every observation cycle operates under a strict **50 µs receiver dwell window**:
-
-```
-0 µs                        25 µs                 40 µs              49.98 µs    50 µs
-├─────────────────────────────┼─────────────────────┼───────────────────┼──────────┤
-│   RF Synthesizer Settling   │  ADC Baseband Sample│ C++20 RMAB Engine │ Guard /  │
-│      & LO Phase Lock        │  & CA-CFAR Detect   │ Decision Cycle    │ Pipeline │
-│        (25 – 30 µs)         │     (15 – 18 µs)    │    (20.80 ns)     │ (>2 µs)  │
-└─────────────────────────────┴─────────────────────┴───────────────────┴──────────┘
-```
-
-- **Synthesizer Settling / PLL Lock:** Fast-settling fractional-N PLL locks the LO to the commanded 500 MHz sub-band within 25–30 µs.
-- **ADC Dwell & Detection:** Hardware CA-CFAR (Cell-Averaging Constant False Alarm Rate) energy detectors process the digitized burst in 15–18 µs.
-- **C++20 Zero-Allocation Scheduler:** Evaluates all 35 Whittle indices and selects the optimal next sub-band in **20.80 ns** (<0.05% of the dwell window).
-- **Safety Margin:** >2.0 µs guard time ensures deterministic zero deadline misses.
-
-### 3. Distributed Inter-Node Datalink
-- Tuner states and track updates synchronize between airborne nodes (UAV-1, UAV-2, Ground C2) via low-bandwidth UDP datalinks (<50 kbps).
-- **Disjoint Sub-Band Invariant:** Even in the event of communication latency or dropped packets, nodes enforce deterministic role hash partitions, guaranteeing **0.0% spectral collisions** under contested EW jamming conditions.
-
----
-
-## 🖥️ C2-ESM Tactical TOC Web Dashboard
-
-Launch the integrated tactical dashboard serving real-time EW telemetry at `http://127.0.0.1:8050`:
-
-- **Tab 01: Live Waterfall:** High-performance HTML5 canvas rendering 35 frequency channels with color-coded receiver tuner overlays, accompanied by a 7×5 sub-band Age-of-Information (AoI) matrix.
-- **Tab 02: Fleet Telemetry:** Health monitoring for Node Alpha (UAV-1), Node Bravo (UAV-2), and Node Charlie (Ground Station) displaying battery state, RF synthesizer temperatures, and live operator advisory acknowledgments.
-- **Tab 03: Threat Library (EOB):** Live-updating Electronic Order of Battle table extracting estimated PRIs, carrier frequencies, and alert levels via delta-TOA analysis, with **1-click PDW CSV/JSON export**.
-- **Tab 04: Performance & FoM:** Live KPI HUD cards (IR, TTI, Throughput, Collisions), 4 interactive Plotly charts (Cumulative Interceptions, Policy IR % Bar, 35-Band Dwell Histogram, TTI Latency), and the complete 20-episode Monte Carlo evaluation matrix.
-- **Tab 05: Mission Control:** Dynamic dropdown to hot-swap schedulers (`CooperativeRoleScheduler`, `MultiWhittleRMAB`, `MultiSequentialSweep`), switch scenario presets, throttle simulation speed, and inspect the real-time system audit log.
-
-*(The legacy Dash analytical workbench remains accessible at `http://127.0.0.1:8050/dash/`).*
-
----
-
 ## ⚡ Quickstart Guide
 
 ### 1. System Requirements & Toolchain
@@ -259,6 +213,52 @@ uv run pytest --tb=short -q
 uv run python demo/run_phase3_benchmark.py
 ```
 *Generates full statistical evaluation curves and Figures of Merit.*
+
+---
+
+## 🛠️ Edge Hardware Implementation & Deployment Plan
+
+Smart Scan EW is architected for direct tactical deployment on low-SWaP (Size, Weight, and Power) airborne and drone Electronic Support payloads:
+
+### 1. Target Embedded Compute & RF Front-End Architecture
+- **Embedded Compute Unit:** **NVIDIA Jetson Orin Nano / Orin NX** (6-core ARM Cortex-A78AE CPU @ 1.5 GHz, 1024-core Ampere GPU with Tensor Cores, 20–40W operational envelope) or low-SWaP defense single-board computers (SBCs).
+- **RF Transceiver / Front-End:** Wideband heterodyne receiver front-end (AD9361 / ADRV9009 or DRDO-indigenous EW digitizer) covering 0.5–18 GHz via stepped local oscillator (LO) downconversion into 35 selectable 500 MHz instantaneous bandwidth (IBW) sub-bands.
+- **High-Throughput Bus:** Direct PCIe Gen4 / Gigabit Ethernet streaming digitized I/Q samples and hardware-generated Pulse Descriptor Words (PDWs) straight into host memory via DMA.
+
+### 2. Hard Real-Time 50 µs Dwell Budget Allocation
+Every observation cycle operates under a strict **50 µs receiver dwell window**:
+
+```
+0 µs                        25 µs                 40 µs              49.98 µs    50 µs
+├─────────────────────────────┼─────────────────────┼───────────────────┼──────────┤
+│   RF Synthesizer Settling   │  ADC Baseband Sample│ C++20 RMAB Engine │ Guard /  │
+│      & LO Phase Lock        │  & CA-CFAR Detect   │ Decision Cycle    │ Pipeline │
+│        (25 – 30 µs)         │     (15 – 18 µs)    │    (20.80 ns)     │ (>2 µs)  │
+└─────────────────────────────┴─────────────────────┴───────────────────┴──────────┘
+```
+
+- **Synthesizer Settling / PLL Lock:** Fast-settling fractional-N PLL locks the LO to the commanded 500 MHz sub-band within 25–30 µs.
+- **ADC Dwell & Detection:** Hardware CA-CFAR (Cell-Averaging Constant False Alarm Rate) energy detectors process the digitized burst in 15–18 µs.
+- **C++20 Zero-Allocation Scheduler:** Evaluates all 35 Whittle indices and selects the optimal next sub-band in **20.80 ns** (<0.05% of the dwell window).
+- **Safety Margin:** >2.0 µs guard time ensures deterministic zero deadline misses.
+
+### 3. Distributed Inter-Node Datalink
+- Tuner states and track updates synchronize between airborne nodes (UAV-1, UAV-2, Ground C2) via low-bandwidth UDP datalinks (<50 kbps).
+- **Disjoint Sub-Band Invariant:** Even in the event of communication latency or dropped packets, nodes enforce deterministic role hash partitions, guaranteeing **0.0% spectral collisions** under contested EW jamming conditions.
+
+---
+
+## 🖥️ C2-ESM Tactical TOC Web Dashboard
+
+Launch the integrated tactical dashboard serving real-time EW telemetry at `http://127.0.0.1:8050`:
+
+- **Tab 01: Live Waterfall:** High-performance HTML5 canvas rendering 35 frequency channels with color-coded receiver tuner overlays, accompanied by a 7×5 sub-band Age-of-Information (AoI) matrix.
+- **Tab 02: Fleet Telemetry:** Health monitoring for Node Alpha (UAV-1), Node Bravo (UAV-2), and Node Charlie (Ground Station) displaying battery state, RF synthesizer temperatures, and live operator advisory acknowledgments.
+- **Tab 03: Threat Library (EOB):** Live-updating Electronic Order of Battle table extracting estimated PRIs, carrier frequencies, and alert levels via delta-TOA analysis, with **1-click PDW CSV/JSON export**.
+- **Tab 04: Performance & FoM:** Live KPI HUD cards (IR, TTI, Throughput, Collisions), 4 interactive Plotly charts (Cumulative Interceptions, Policy IR % Bar, 35-Band Dwell Histogram, TTI Latency), and the complete 20-episode Monte Carlo evaluation matrix.
+- **Tab 05: Mission Control:** Dynamic dropdown to hot-swap schedulers (`CooperativeRoleScheduler`, `MultiWhittleRMAB`, `MultiSequentialSweep`), switch scenario presets, throttle simulation speed, and inspect the real-time system audit log.
+
+*(The legacy Dash analytical workbench remains accessible at `http://127.0.0.1:8050/dash/`).*
 
 ---
 
