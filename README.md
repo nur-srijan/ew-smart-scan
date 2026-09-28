@@ -342,8 +342,8 @@ Watch the complete demonstration video showcasing real-time tactical EW scheduli
 
 ## 👥 Team & Acknowledgments
 
-- **Team:** Robotics & Drones
+- **Team:** Localhost8000
 - **Hackathon:** Smart India Hackathon (SIH) 2026
-- **Problem Statement:** PS-1778 (Autonomous Electronic Support Receiver Scheduling)
+- **Problem Statement:** PS-26055 (Intelligent Radio Frequency Spectrum Monitoring System)
+- **Theme:** Robotics and Drones
 - **Sponsoring Organization:** Defence Research and Development Organisation (DRDO)
-
