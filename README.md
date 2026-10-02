@@ -85,7 +85,7 @@ Evaluated across dynamic scenarios featuring fixed-frequency air defense radars 
 │                            C++20 Zero-Allocation RMAB Engine                                │
 │                  • Closed-form Whittle Index ranking: 20.80 ns / step                       │
 │                  • Sub-50 µs hard real-time execution deadline guarantee                    │
-│                  • Pybind11 zero-copy bindings (`ew_smart_scan_cpp`)                        │
+│                  • Pybind11 zero-copy bindings (`rmab_cpp`)                                 │
 └───────────────────────────────────────────────┴─────────────────────────────────────────────┘
                                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -99,7 +99,7 @@ Evaluated across dynamic scenarios featuring fixed-frequency air defense radars 
 
 ### 🚀 Ultra-Fast C++20 Scheduling Core
 
-The decision engine is implemented in ISO C++20 (`src/rmab_engine.cpp`) with zero dynamic memory allocations in the critical path:
+The decision engine is implemented in ISO C++20 (`hardware/whittle_engine.hpp` and `src/bindings.cpp`) with zero dynamic memory allocations in the critical path:
 
 - **Benchmark Result:** **$20.80\,\text{ns}$** average ranking latency per dwell step on standard hardware.
 - **Dwell Deadline:** Fixed $50\,\mu\text{s}$ receiver dwell budget. The C++20 engine consumes $<0.05\%$ of the available time window, leaving $>99.9\%$ for RF synthesizer settling and signal capture.
@@ -260,14 +260,16 @@ Launch the integrated tactical dashboard serving real-time EW telemetry at `http
 
 ```
 ew-smart-scan/
-├── src/                         # C++20 High-Performance Core
-│   ├── rmab_engine.cpp          # Zero-allocation Whittle Index engine
-│   └── bindings.cpp             # Pybind11 module bindings (ew_smart_scan_cpp)
+├── src/                         # C++20 Core Bindings
+│   └── bindings.cpp             # Pybind11 module bindings for rmab_cpp
 │
-├── hardware/                    # Edge Hardware Benchmarking & Harness
+├── hardware/                    # Edge Hardware Engine & Timing Harness
+│   ├── whittle_engine.hpp       # Template-based zero-allocation C++20 Whittle Index engine
+│   ├── whittle_index.hpp        # Closed-form Whittle calculations & AoI subsidies
+│   ├── dwell_timer.hpp          # 50 µs hardware dwell timing simulation harness
 │   ├── test_timing.cpp          # Nanosecond-resolution hard real-time test harness
-│   ├── test_timing              # Compiled executable (20.8 ns decision cycle)
-│   └── run_timing_bench.sh      # Benchmark automation script
+│   ├── test_timing              # Compiled standalone timing benchmark executable
+│   └── export_onnx.py           # ONNX model export utility
 │
 ├── ew_sim/                      # Spectrum Environment & Physics Simulation
 │   ├── env.py                   # Single-receiver Gymnasium EWSpectrumEnv
@@ -277,11 +279,12 @@ ew-smart-scan/
 │   └── turing_loader.py         # Synthetic Radar Dataset adapter (PDW schema)
 │
 ├── schedulers/                  # Autonomous Scheduling Algorithms
-│   ├── multi_cooperative.py     # Fleet Cooperative Role Scheduler (0.0% collisions)
+│   ├── multi_schedulers.py      # CooperativeRoleScheduler (0.0% collisions) & Multi-sweeps
+│   ├── rmab_cpp_wrapper.py      # High-performance Python wrapper calling native C++20 rmab_cpp
 │   ├── rmab.py                  # Python Whittle Index Restless Bandit
-│   ├── cpp_rmab_adapter.py      # Python wrapper calling native C++20 engine
 │   ├── predictor.py             # Online Periodicity & Scan Phase Estimator
 │   ├── drl_agent.py             # Recurrent PPO / Actor-Critic PyTorch policy
+│   ├── multi_drl.py             # Multi-agent recurrent policy network
 │   └── baselines.py             # Sequential, Pseudo-Random, and Priority sweeps
 │
 ├── eval/                        # Evaluation & Figures of Merit (FoM)
